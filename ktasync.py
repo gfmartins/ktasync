@@ -28,6 +28,7 @@
 # TODO PEP8
 # TODO Move documentation from homepage to code
 # TODO Expire -1??
+# TODO Default db=0??
 # TODO Add some logging (tornados nice output?):w
 # TODO embed factory method that creates a ktserver and client
 #      -> find free random port automatically (within range)
@@ -117,6 +118,7 @@ class KyotoTycoon(object):
                 proc = subprocess.Popen(
                     [
                         "ktserver",
+                        "-le",
                         "-host",
                         "127.0.0.1",
                         "-port",
@@ -156,13 +158,13 @@ class KyotoTycoon(object):
             self._connect()
     
     
-    def set(self, key, val, db, expire=DEFAULT_EXPIRE, flags=0):
+    def set(self, key, val, db=0, expire=DEFAULT_EXPIRE, flags=0):
         """The set"""
         return self.set_bulk(((key,val,db,expire),), flags)
     
     
-    def set_bulk_kv(self, kv, db, expire=DEFAULT_EXPIRE, flags=0):
-        recs = ((key,val,db,expire) for key,val in kv.iteritems())
+    def set_bulk_kv(self, kv, db=0, expire=DEFAULT_EXPIRE, flags=0):
+        recs = ((key,val,db,expire) for key,val in kv.items())
         return self.set_bulk(recs, flags)
     
     
@@ -198,14 +200,14 @@ class KyotoTycoon(object):
             raise KyotoTycoonError('Unknown server error')
     
     
-    def get(self, key, db, flags=0):
+    def get(self, key, db=0, flags=0):
         recs = self.get_bulk(((key, db),), flags)
         if not recs:
             return None
         return recs[0][1]
     
     
-    def get_bulk_keys(self, keys, db, flags=0):
+    def get_bulk_keys(self, keys, db=0, flags=0):
         recs = ((key,db) for key in keys)
         recs = self.get_bulk(recs, flags)
         return dict(((key,val) for key,val,db,xt in recs))

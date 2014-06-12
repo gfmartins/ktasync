@@ -58,7 +58,7 @@ class KyotoTycoon:
     
     
     def set_bulk_kv(self, kv, db, expire=DEFAULT_EXPIRE, flags=0):
-        recs = ((key,val,db,expire) for key,val in kv.iteritems())
+        recs = ((key,val,db,expire) for key,val in kv.items())
         return self.set_bulk(recs, flags)
     
     
@@ -77,7 +77,7 @@ class KyotoTycoon:
         
         request[1] = struct.pack('!I', cnt)
         
-        self._write(''.join(request))
+        self._write(b''.join(request))
         
         if flags & FLAG_NOREPLY:
             return None
@@ -119,7 +119,7 @@ class KyotoTycoon:
         
         request[1] = struct.pack('!I', cnt)
         
-        self._write(''.join(request))
+        self._write(b''.join(request))
             
         magic, = struct.unpack('!B', self._read(1))
         if magic == MB_GET_BULK:
@@ -161,7 +161,7 @@ class KyotoTycoon:
         
         request[1] = struct.pack('!I', cnt)
         
-        self._write(''.join(request))
+        self._write(b''.join(request))
         
         if flags & FLAG_NOREPLY:
             return None
@@ -192,7 +192,7 @@ class KyotoTycoon:
         
         request[1] = struct.pack('!I', cnt)
         
-        self._write(''.join(request))
+        self._write(b''.join(request))
         
         if flags & FLAG_NOREPLY:
             return None
@@ -237,4 +237,4 @@ class KyotoTycoon:
                 buf.append(recv)
                 read += len(recv)
         
-        return ''.join(buf)
+        return b''.join(buf)
