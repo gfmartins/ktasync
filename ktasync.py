@@ -38,7 +38,9 @@ The library is implemented in pure Python and only requires the modules socket
 and struct (Python standard library). Therefore, it is possible to use the
 library with other interpreters than the standard CPython. The code has been
 tested with python 3.4 since it is based on the asyncio module interoduced in
-3.4. If pypy will implement asyncio in can be ported to pypy."""
+3.4. If pypy will implement asyncio in can be ported to pypy.
+
+"""
 
 # TODO PEP8
 # TODO Move documentation from homepage to code
@@ -97,7 +99,9 @@ class KyotoTycoon(object):
 
     Keys and values of database entries are python bytes. You can pickle
     objects to bytes strings. The encoding is handled by the user when
-    converting to bytes. Usually bytes(bla, encoding="UTF-8") is safe."""
+    converting to bytes. Usually bytes(bla, encoding="UTF-8") is safe.
+
+    """
 
     _client = None
 
@@ -114,13 +118,14 @@ class KyotoTycoon(object):
         :param args: Additional arguments for the Kyoto Tycoon server.
 
         :param timeout: Optional timeout for the socket. None means no timeout
-        (please also look at the Python socket manual).
+                        (please also look at the Python socket manual).
 
         :param range_from: Port range to select a random port from (from).
 
         :param range_to: Port range to select a random port from (to).
 
         :rtype: KyotoTycoon
+
         """
         if KyotoTycoon._client:
             return KyotoTycoon._client
@@ -191,18 +196,19 @@ class KyotoTycoon(object):
     ):
         """
         :param host: The hostname or IP to connect to, defaults to
-        'localhost'.
+                     'localhost'.
 
         :param port: The port number, defaults to 1978 which is the default
-        port of Kyoto Tycoon.
+                     port of Kyoto Tycoon.
 
         :param lazy: If set to True, connection is not immediately established
-        on object creation, instead it is openend automatically when required
-        for the first time. This is the recommended setting, because opening a
-            connection is only necessary if you actually use it.
+                     on object creation, instead it is openend automatically
+                     when required for the first time. This is the recommended
+                     setting, because opening a connection is only necessary
+                     if you actually use it.
 
         :param timeout: Optional timeout for the socket. None means no timeout
-        (please also look at the Python socket manual).
+                        (please also look at the Python socket manual).
         """
         self.host = host
         self.port = port
@@ -216,21 +222,27 @@ class KyotoTycoon(object):
         in the database.
 
         :param key: The key of the entry,
+
         :type key: bytes
+
         :param val: The value of the entry
+
         :type val: bytes
+
         :param db: Database index to store the record in. Default to 0.
+
         :type db: int
 
         :param expire: Expiration time for all entries.
-        kyototycoon.DEFAULT_EXPIRE is 0x7FFFFFFFFFFFFFFF which means that the
-        records should never expire in the (near) future.
+                       kyototycoon.DEFAULT_EXPIRE is 0x7FFFFFFFFFFFFFFF which
+                       means that the records should never expire in the
+                       (near) future.
 
         :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
-        wait for an answer of the server.
+                      wait for an answer of the server.
 
         :return: The number of actually stored records, or None if flags was
-        set to kyototycoon.FLAG_NOREPLY.
+                 set to kyototycoon.FLAG_NOREPLY.
         """
         return self.set_bulk(((key, val, db, expire),), flags)
 
@@ -244,14 +256,15 @@ class KyotoTycoon(object):
         :param db: database index to store the values in. defaults to 0.
 
         :param expire: Expiration time for all entries.
-        kyototycoon.DEFAULT_EXPIRE is 0x7FFFFFFFFFFFFFFF which means that the
-        records should never expire in the (near) future.
+                       kyototycoon.DEFAULT_EXPIRE is 0x7FFFFFFFFFFFFFFF which
+                       means that the records should never expire in the
+                       (near) future.
 
         :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
-        wait for an answer of the server.
+                      wait for an answer of the server.
 
         :return: The number of actually stored records, or None if flags was
-        set to kyototycoon.FLAG_NOREPLY.
+                 set to kyototycoon.FLAG_NOREPLY.
         """
         recs = ((key, val, db, expire) for key, val in kv.items())
         return self.set_bulk(recs, flags)
@@ -260,13 +273,13 @@ class KyotoTycoon(object):
         """Stores multiple records at once.
 
         :param recs: iterable (e.g. list) of records. Each record is a
-        list or tuple of 4 entries: key, val, db, expire
+                     list or tuple of 4 entries: key, val, db, expire
 
         :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
-        wait for an answer of the server.
+                      wait for an answer of the server.
 
         :return: The number of actually stored records, or None if flags was
-        set to kyototycoon.FLAG_NOREPLY.
+                 set to kyototycoon.FLAG_NOREPLY.
         """
         if self.socket is None:
             self._connect()
@@ -310,7 +323,8 @@ class KyotoTycoon(object):
         :param flags: reserved and not used now. (defined by protocol)
 
         :return: The value of the record, or None if the record could not be
-        found in the database.
+                 found in the database.
+
         """
         recs = self.get_bulk(((key, db),), flags)
         if not recs:
@@ -337,12 +351,12 @@ class KyotoTycoon(object):
         """Retrieves multiple records at once.
 
         :param recs: iterable (e.g. list) of record descriptions. Each
-        record is a list or tuple of 2 entries: key,db
+                     record is a list or tuple of 2 entries: key,db
 
         :param flags: reserved and not used now. (defined by protocol)
 
         :return: A list of records. Each record is a tuple of 4 entries: (key,
-        val, db, expire)
+                 val, db, expire)
         """
         if self.socket is None:
             self._connect()
@@ -386,10 +400,10 @@ class KyotoTycoon(object):
         :param db: database index to store the values in. defaults to 0.
 
         :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
-        wait for an answer of the server.
+                      wait for an answer of the server.
 
         :return: The number of removed records, or None if flags was set to
-        kyototycoon.FLAG_NOREPLY
+                 kyototycoon.FLAG_NOREPLY
         """
         return self.remove_bulk(((key, db),), flags)
 
@@ -402,10 +416,10 @@ class KyotoTycoon(object):
         :param db: database index to store the values in. defaults to 0.
 
         :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
-        wait for an answer of the server.
+                      wait for an answer of the server.
 
         :return: The number of removed records, or None if flags was set to
-        kyototycoon.FLAG_NOREPLY
+                 kyototycoon.FLAG_NOREPLY
         """
         recs = ((key, db) for key in keys)
         return self.remove_bulk(recs, flags)
@@ -414,13 +428,13 @@ class KyotoTycoon(object):
         """Remove multiple records at once.
 
         :param recs: iterable (e.g. list) of record descriptions. Each
-        record is a list or tuple of 2 entries: key,db
+                     record is a list or tuple of 2 entries: key,db
 
         :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
-        wait for an answer of the server.
+                      wait for an answer of the server.
 
         :return: The number of removed records, or None if flags was set to
-        kyototycoon.FLAG_NOREPLY
+                 kyototycoon.FLAG_NOREPLY
         """
         if self.socket is None:
             self._connect()
@@ -455,13 +469,13 @@ class KyotoTycoon(object):
         :param name: The name of the LUA function.
 
         :param recs: iterable (e.g. list) of records. Each record is a list or
-        tuple of 2 entries: key, val
+                     tuple of 2 entries: key, val
 
         :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
-        wait for an answer of the server.
+                      wait for an answer of the server.
 
         :return: A list of records. Each record is a tuple of 2 entries: (key,
-        val). Or None if flags was set to kyototycoon.FLAG_NOREPLY.
+                 val). Or None if flags was set to kyototycoon.FLAG_NOREPLY.
         """
         if self.socket is None:
             self._connect()
