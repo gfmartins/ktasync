@@ -26,6 +26,8 @@ import uuid
 import ktasync
 import asyncio
 import importlib.machinery  # noqa
+import os
+import random
 
 loader = importlib.machinery.SourceFileLoader(
     "kyototycoon", "files/kyototycoon_orig.py"
@@ -33,30 +35,32 @@ loader = importlib.machinery.SourceFileLoader(
 kyototycoon = loader.load_module()
 
 NUM_REQUESTS = 1000
-NUM_BULK = 5
+NUM_BULK = 50
 NUM_BATCH = 20
 
 
 loop = asyncio.get_event_loop()
 
-client = ktasync.KyotoTycoon.embedded()
-#client = ktasync.KyotoTycoon(host="harry")
-orig   = kyototycoon.KyotoTycoon(host=client.host,port=client.port)
+#client = ktasync.KyotoTycoon.embedded(["test.kch"])
+client = ktasync.KyotoTycoon(host="harry")
+orig   = kyototycoon.KyotoTycoon(host=client.host, port=client.port)
+
 
 def _create_request():
     """Get requests"""
+    a = os.urandom(64)
+    c = random.randint(0, 1024)
+    b = os.urandom(1)
     return [
         {
-            bytes(
-                uuid.uuid1().hex, encoding="UTF-8"
-            ) : b'1' for n in range(NUM_BULK)
+            a : b * 20 for n in range(NUM_BULK)
         } for n in range(NUM_REQUESTS)  # noqa
     ]
 
+requests = _create_request()
 
 def benchmark_get_bulk():
     """Standard bulk test"""
-    requests = _create_request()
 
     @asyncio.coroutine
     def prepare():
@@ -82,7 +86,6 @@ def benchmark_get_bulk():
 
 def benchmark_batch_get_bulk():
     """Batch bulk test"""
-    requests = _create_request()
 
     @asyncio.coroutine
     def prepare():
@@ -117,7 +120,6 @@ def benchmark_batch_get_bulk():
 
 def benchmark_set_bulk():
     """Standard bulk test"""
-    requests = _create_request()
 
     @asyncio.coroutine
     def doit():
@@ -136,8 +138,6 @@ def benchmark_set_bulk():
 def benchmark_orig_get_bulk():
     """Original bulk test"""
 
-    requests = _create_request()
-
     [orig.set_bulk_kv(req, db=0) for req in requests]
 
     start = time.time()
@@ -150,7 +150,6 @@ def benchmark_orig_get_bulk():
 
 def benchmark_orig_set_bulk():
     """Original bulk test"""
-    requests = _create_request()
 
     start = time.time()
     [orig.set_bulk_kv(req, db=0) for req in requests]
@@ -165,4 +164,5 @@ benchmark_set_bulk()
 benchmark_batch_get_bulk()
 benchmark_orig_get_bulk()
 benchmark_orig_set_bulk()
+# os.unlink("test.kch")
 # pylama:ignore=W0106

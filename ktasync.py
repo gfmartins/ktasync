@@ -77,7 +77,7 @@ MB_PLAY_SCRIPT  = 0xb4
 DEFAULT_HOST    = 'localhost'
 DEFAULT_PORT    = 1978
 DEFAULT_EXPIRE  = 0x7FFFFFFFFFFFFFFF
-MAX_CONNECTIONS = 20
+MAX_CONNECTIONS = 5
 
 FLAG_NOREPLY = 0x01
 
@@ -166,14 +166,22 @@ class KyotoTycoon(object):
                     stderr=sys.__stderr__.fileno(),
                     stdout=sys.__stdout__.fileno(),
                 )
+                cleanup_done = [False]
 
                 def cleanup():
                     """Helper"""
-                    proc.terminate()
+                    try:
+                        cleanup_done[0] = True
+                        proc.terminate()
+                        proc.wait()
+                    except ProcessLookupError:
+                        pass
 
                 atexit.register(cleanup)
                 proc.wait()
-                _l().critical("ktserver died!")
+                time.sleep(10)
+                if not cleanup_done[0]:
+                    _l().critical("ktserver died!")
 
         thr = threading.Thread(target=keep_alive)
         thr.setDaemon(True)
@@ -192,6 +200,7 @@ class KyotoTycoon(object):
                 return KyotoTycoon._client
             except ConnectionRefusedError:  # noqa
                 time.sleep(0.2)
+        raise KyotoTycoonError("Embedded server not started!")
 
     def __init__(
             self,
@@ -317,9 +326,10 @@ class KyotoTycoon(object):
             if flags & FLAG_NOREPLY:
                 return None
 
-            magic, = struct.unpack('!B', (yield from sr.read(1)))
+            magic, = struct.unpack('!B', (yield from sr.readexactly(1)))
             if magic == MB_SET_BULK:
-                recs_cnt, = struct.unpack('!I', (yield from sr.read(4)))
+                recs_cnt, = struct.unpack('!I', (yield from sr.readexactly(4)))
+                self._push_streams(sr, sw)
                 return recs_cnt
             elif magic == MB_ERROR:
                 raise KyotoTycoonError(
@@ -328,7 +338,7 @@ class KyotoTycoon(object):
             else:
                 raise KyotoTycoonError('Unknown server error')
         finally:
-            self._push_streams(sr, sw)
+            self._release_connection()
 
     @asyncio.coroutine
     def get(self, key, db=0, flags=0):
@@ -395,26 +405,37 @@ class KyotoTycoon(object):
             request[1] = struct.pack('!I', cnt)
 
             sw.write(b''.join(request))
-            return (yield from self._read_keys(sr, MB_GET_BULK))
-        finally:
+            res = yield from self._read_keys(sr, MB_GET_BULK)
             self._push_streams(sr, sw)
+            return res
+        finally:
+            self._release_connection()
 
     @asyncio.coroutine
     def _read_keys(self, sr, magic_expect):
         """Internal function for reading key from get_bulk or play_script"""
-        data = yield from sr.read(5)
+        data = yield from sr.readexactly(5)
         magic, = struct.unpack('!B', data[:1])
         if magic == magic_expect:
             recs_cnt, = struct.unpack('!I', data[1:])
+            recs_cnt -= 1
             recs = []
-            data = yield from sr.read(18)
-            pre_data = 0
-            for _ in range(recs_cnt):
+            # Reduce yields be ready key and next header at once
+            if recs_cnt <= 0:
+                data = yield from sr.readexactly(18)
+                pre_data = 0
+                for _ in range(recs_cnt):
+                    db, key_len, val_len, xt = struct.unpack(
+                        '!HIIq', data[pre_data:]
+                    )
+                    pre_data = key_len + val_len
+                    data = yield from sr.readexactly(pre_data + 18)
+                    recs.append((data[:key_len], data[key_len:], db, xt))
                 db, key_len, val_len, xt = struct.unpack(
                     '!HIIq', data[pre_data:]
                 )
                 pre_data = key_len + val_len
-                data = yield from sr.read(pre_data + 18)
+                data = yield from sr.readexactly(pre_data)
                 recs.append((data[:key_len], data[key_len:], db, xt))
             return recs
         elif magic == MB_ERROR:
@@ -491,9 +512,10 @@ class KyotoTycoon(object):
             if flags & FLAG_NOREPLY:
                 return None
 
-            magic, = struct.unpack('!B', (yield from sr.read(1)))
+            magic, = struct.unpack('!B', (yield from sr.readexactly(1)))
             if magic == MB_REMOVE_BULK:
-                recs_cnt, = struct.unpack('!I', (yield from sr.read(4)))
+                recs_cnt, = struct.unpack('!I', (yield from sr.readexactly(4)))
+                self._push_streams(sr, sw)
                 return recs_cnt
             elif magic == MB_ERROR:
                 raise KyotoTycoonError(
@@ -502,7 +524,7 @@ class KyotoTycoon(object):
             else:
                 raise KyotoTycoonError('Unknown server error')
         finally:
-            self._push_streams(sr, sw)
+            self._release_connection()
 
     @asyncio.coroutine
     def play_script(self, name, recs, flags=0):
@@ -542,10 +564,12 @@ class KyotoTycoon(object):
             if flags & FLAG_NOREPLY:
                 return None
 
-            magic, = struct.unpack('!B', (yield from sr.read(1)))
-            return (yield from self._read_keys(sr, MB_PLAY_SCRIPT))
-        finally:
+            magic, = struct.unpack('!B', (yield from sr.readexactly(1)))
+            res = yield from self._read_keys(sr, MB_PLAY_SCRIPT)
             self._push_streams(sr, sw)
+            return res
+        finally:
+            self._release_connection()
 
     def close(self):
         """Close the socket"""
@@ -573,7 +597,13 @@ class KyotoTycoon(object):
                 self.port,
             ))
 
+    def _release_connection(self):
+        """Release the semaphore
+
+        If a connection dies, we won't return it. Therefore release is an
+        extra method."""
+        self.semaphore.release()
+
     def _push_streams(self, sr, sw):
         """Return used stream."""
-        self.semaphore.release()
         self.free_streams.append((sr, sw))
