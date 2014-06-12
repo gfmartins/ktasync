@@ -27,10 +27,11 @@ try:
     import unittest2      as unittest
 except ImportError:  # pragma: no cover
     import unittest
-try:
-    import unittest.mock  as mock
-except ImportError:  # pragma: no cover
-    import mock
+# try:
+# TODO Use or remove
+#     import unittest.mock  as mock
+# except ImportError:  # pragma: no cover
+#     import mock
 
 import ktasync
 

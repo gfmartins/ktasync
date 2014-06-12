@@ -317,6 +317,7 @@ class KyotoTycoon(object):
 
 
         :param key: The key of the entry
+        :type  key: bytes
 
         :param db: The database index. Defaults to 0.
 
@@ -396,6 +397,7 @@ class KyotoTycoon(object):
         item from the database.
 
         :param key: The key of the entry.
+        :type  key: bytes
 
         :param db: database index to store the values in. defaults to 0.
 
