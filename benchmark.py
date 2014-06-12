@@ -32,13 +32,16 @@ loader = importlib.machinery.SourceFileLoader(
 )
 kyototycoon = loader.load_module()
 
-NUM_REQUESTS = 5000
+NUM_REQUESTS = 1000
 NUM_BULK = 5
-NUM_BATCH = 50
+NUM_BATCH = 20
 
 
 loop = asyncio.get_event_loop()
 
+#client = ktasync.KyotoTycoon.embedded()
+client = ktasync.KyotoTycoon(host="harry")
+orig   = kyototycoon.KyotoTycoon(host=client.host,port=client.port)
 
 def _create_request():
     """Get requests"""
@@ -53,7 +56,6 @@ def _create_request():
 
 def benchmark_get_bulk():
     """Standard bulk test"""
-    client = ktasync.KyotoTycoon.embedded()
     requests = _create_request()
 
     @asyncio.coroutine
@@ -80,7 +82,6 @@ def benchmark_get_bulk():
 
 def benchmark_batch_get_bulk():
     """Batch bulk test"""
-    client = ktasync.KyotoTycoon.embedded()
     requests = _create_request()
 
     @asyncio.coroutine
@@ -116,7 +117,6 @@ def benchmark_batch_get_bulk():
 
 def benchmark_set_bulk():
     """Standard bulk test"""
-    client = ktasync.KyotoTycoon.embedded()
     requests = _create_request()
 
     @asyncio.coroutine
@@ -135,15 +135,13 @@ def benchmark_set_bulk():
 
 def benchmark_orig_get_bulk():
     """Original bulk test"""
-    emb = ktasync.KyotoTycoon.embedded()
-    client = kyototycoon.KyotoTycoon(port=emb.port)
 
     requests = _create_request()
 
-    [client.set_bulk_kv(req, db=0) for req in requests]
+    [orig.set_bulk_kv(req, db=0) for req in requests]
 
     start = time.time()
-    [client.get_bulk_keys(req.keys(), db=0) for req in requests]
+    [orig.get_bulk_keys(req.keys(), db=0) for req in requests]
     print(
         'orig get_bulk qps:',
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
@@ -152,13 +150,10 @@ def benchmark_orig_get_bulk():
 
 def benchmark_orig_set_bulk():
     """Original bulk test"""
-    emb = ktasync.KyotoTycoon.embedded()
-    client = kyototycoon.KyotoTycoon(port=emb.port)
-
     requests = _create_request()
 
     start = time.time()
-    [client.set_bulk_kv(req, db=0) for req in requests]
+    [orig.set_bulk_kv(req, db=0) for req in requests]
     print(
         'orig set_bulk qps:',
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
