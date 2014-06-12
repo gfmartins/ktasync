@@ -35,8 +35,8 @@ loader = importlib.machinery.SourceFileLoader(
 )
 kyototycoon = loader.load_module()
 
+NUM_REQUESTS = 10000
 NUM_BULK = 50
-NUM_REQUESTS = int(100000000 / NUM_BULK)
 NUM_BATCH = 20
 
 
@@ -47,22 +47,14 @@ client   = ktasync.KyotoTycoon.embedded(["test.kch"])
 orig     = kyototycoon.KyotoTycoon(host=client.host, port=client.port)
 dbm_file = dbm.open("test.dbm", "c")
 
-
 def _create_request():
     """Get requests"""
-    a = os.urandom(64)
-    c = random.randint(1024, 1024*20)
-    b = os.urandom(c)
-    arr = []
+    file_ = open("rand.bin", "rb")
     for _ in range(NUM_REQUESTS):
         dict_ = {}
         for _ in range(NUM_BULK):
-            dict_[a] = b
-        arr.append(dict_)
-    return arr
-
-
-requests = _create_request()
+            dict_[file_.read(64)] = file_.read(1024)
+        yield dict_
 
 def benchmark_get_bulk():
     """Standard bulk test"""
@@ -70,12 +62,14 @@ def benchmark_get_bulk():
     @asyncio.coroutine
     def prepare():
         """Helper"""
+        requests = _create_request()
         for req in requests:
             yield from client.set_bulk_kv(req)
 
     @asyncio.coroutine
     def doit():
         """Helper"""
+        requests = _create_request()
         for req in requests:
             res = yield from client.get_bulk_keys(req.keys())
 
@@ -92,29 +86,28 @@ def benchmark_get_bulk():
 def benchmark_batch_get_bulk():
     """Batch bulk test"""
 
+    requests = _create_request()
     @asyncio.coroutine
     def prepare():
         """Helper"""
+        requests = _create_request()
         for req in requests:
             yield from client.set_bulk_kv(req)
 
     @asyncio.coroutine
-    def doit(from_, to_):
+    def doit(step):
         """Helper"""
-        for req in requests[from_:to_]:
+        for _ in range(step):
+            req = next(requests)
             res = yield from client.get_bulk_keys(req.keys())
 
     loop.run_until_complete(prepare())
 
     start = time.time()
     batchs = []
-    step = NUM_REQUESTS / NUM_BATCH
-    cur = int(step)
-    last = 0
-    while cur <= NUM_REQUESTS:
-        batchs.append(doit(last, cur))
-        last = int(cur)
-        cur += int(step)
+    step = int(NUM_REQUESTS / NUM_BATCH)
+    for _ in range(NUM_BATCH):
+        batchs.append(doit(step))
     loop.run_until_complete(asyncio.wait(batchs))
     print(
         'batch get_bulk qps:',
@@ -126,6 +119,7 @@ def benchmark_batch_get_bulk():
 def benchmark_set_bulk():
     """Standard bulk test"""
 
+    requests = _create_request()
     @asyncio.coroutine
     def doit():
         """Helper"""
@@ -143,9 +137,11 @@ def benchmark_set_bulk():
 def benchmark_orig_get_bulk():
     """Original bulk test"""
 
+    requests = _create_request()
     [orig.set_bulk_kv(req, db=0) for req in requests]
 
     start = time.time()
+    requests = _create_request()
     [orig.get_bulk_keys(req.keys(), db=0) for req in requests]
     print(
         'orig get_bulk qps:',
@@ -153,9 +149,10 @@ def benchmark_orig_get_bulk():
     )
 
 
-def benchmark_dbm_set():
-    """Ddm test"""
+def benchmark_orig_set_bulk():
+    """Original bulk test"""
 
+    requests = _create_request()
     start = time.time()
     [orig.set_bulk_kv(req, db=0) for req in requests]
     print(
@@ -163,14 +160,30 @@ def benchmark_dbm_set():
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
 
-
-def benchmark_dbm_get():
+def benchmark_dbm_set():
     """Dbm test"""
 
+    requests = _create_request()
+    start = time.time()
     for req in requests:
         for k, v in req.items():
             dbm_file[k] = v
 
+    dbm_file.sync()
+    print(
+        'dmb get qps:',
+        int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
+    )
+
+def benchmark_dbm_get():
+    """Dbm test"""
+
+    requests = _create_request()
+    for req in requests:
+        for k, v in req.items():
+            dbm_file[k] = v
+
+    requests = _create_request()
     start = time.time()
     for req in requests:
         for k, v in req.items():
@@ -181,24 +194,14 @@ def benchmark_dbm_get():
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
 
-
-def benchmark_orig_set_bulk():
-    """Original bulk test"""
-
-    start = time.time()
-    [orig.set_bulk_kv(req, db=0) for req in requests]
-    print(
-        'orig set_bulk qps:',
-        int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
-    )
-
 print("Starting")
+benchmark_orig_get_bulk()
+benchmark_orig_set_bulk()
 benchmark_get_bulk()
 benchmark_set_bulk()
 benchmark_batch_get_bulk()
-benchmark_orig_get_bulk()
-benchmark_orig_set_bulk()
 benchmark_dbm_get()
-os.unlink("test.kch")
-os.unlink("test.dbm")
+benchmark_dbm_set()
+#os.unlink("test.kch")
+#os.unlink("test.dbm")
 # pylama:ignore=W0106

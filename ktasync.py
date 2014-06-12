@@ -421,7 +421,7 @@ class KyotoTycoon(object):
             recs_cnt -= 1
             recs = []
             # Reduce yields be ready key and next header at once
-            if recs_cnt <= 0:
+            if recs_cnt >= 0:
                 data = yield from sr.readexactly(18)
                 pre_data = 0
                 for _ in range(recs_cnt):
