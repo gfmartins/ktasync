@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+TESTS="$1"
+shift
+./testf "$TESTS" --cover-erase --cover-min-percentage=100 "$@" &
+TESTPID=$!
+bash << EOF &
+	set -e
+	pylama -l pep8,pyflakes,pylint -i E203,E272,E221,E251,E202,E271,C0302,W0511,F0401,R0201,C0325,C0326 ktasync.py
+	pylama -l pep8,pyflakes,pylint -i E203,E272,E221,E251,E202,E271,C0302,W0511,F0401,R0201,C0325,C0326 ktasync_test.py
+EOF
+
+LINTPID=$!
+wait $TESTPID
+TESTRET=$?
+wait $LINTPID
+LINTRET=$?
+echo TEST: $TESTRET, LINT: $LINTRET
+exit $(( $TESTRET || $LINTRET))

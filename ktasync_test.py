@@ -22,3 +22,34 @@
 # DEALINGS IN THE SOFTWARE.
 
 """Tests for ktasync"""
+
+try:
+    import unittest2      as unittest
+except ImportError:  # pragma: no cover
+    import unittest
+try:
+    import unittest.mock  as mock
+except ImportError:  # pragma: no cover
+    import mock
+
+import ktasync
+
+
+class KtasyncTest(unittest.TestCase):
+    def test_just_connect(self):
+        a = ktasync.KyotoTycoon.embedded()
+        self.assertIsInstance(a, ktasync.KyotoTycoon)
+
+    def test_set(self):
+        a = ktasync.KyotoTycoon.embedded()
+        self.assertIsInstance(a, ktasync.KyotoTycoon)
+        a.set(b"huhu", b"super", 0)
+
+    def test_get(self):
+        a = ktasync.KyotoTycoon.embedded()
+        self.assertIsInstance(a, ktasync.KyotoTycoon)
+        a.set(b"huhu", b"best", 0)
+        val = a.get(b"huhu", 0)
+        self.assertEqual(val, b"best")
+
+# pylama:ignore=E0611,C0111

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+TESTS="$1"
+shift
+nosetests --cover-package=ktasync,ktasync_test --with-coverage --cover-tests --tests="$TESTS" "$@"

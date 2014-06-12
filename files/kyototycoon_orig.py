@@ -238,5 +238,3 @@ class KyotoTycoon:
                 read += len(recv)
         
         return ''.join(buf)
-
-
