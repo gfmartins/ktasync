@@ -23,12 +23,25 @@
 # DEALINGS IN THE SOFTWARE.
 
 
-"""Binary protocol of Kyoto Tycoon with asyncio for io batching"""
+"""Binary protocol of Kyoto Tycoon with asyncio for io batching.
+
+Kyoto Tycoon is a lightweight database server with impressive performance. It
+can be accessed via several protocols, including an efficient binary protocol
+which is used in this Python library.
+
+The current implementation of this library provides access to the following
+commands: set_bulk, get_bulk, remove_bulk (plus some wrapper functions to
+easily use these commands if you only need to access a single item) and
+play_script.
+
+The library is implemented in pure Python and only requires the modules socket
+and struct (Python standard library). Therefore, it is possible to use the
+library with other interpreters than the standard CPython. The code has been
+tested with python 3.4 since it is based on the asyncio module interoduced in
+3.4. If pypy will implement asyncio in can be ported to pypy."""
 
 # TODO PEP8
 # TODO Move documentation from homepage to code
-# TODO Expire -1??
-# TODO Default db=0??
 # TODO Add some logging (tornados nice output?):w
 # TODO embed factory method that creates a ktserver and client
 #      -> find free random port automatically (within range)
@@ -50,6 +63,7 @@ import threading
 import subprocess
 import sys
 import time
+import atexit
 
 MB_SET_BULK    = 0xb8
 MB_GET_BULK    = 0xba
@@ -59,7 +73,7 @@ MB_PLAY_SCRIPT = 0xb4
 
 DEFAULT_HOST   = 'localhost'
 DEFAULT_PORT   = 1978
-DEFAULT_EXPIRE = 0xffffffffff
+DEFAULT_EXPIRE = 0x7FFFFFFFFFFFFFFF
 
 FLAG_NOREPLY = 0x01
 
@@ -77,7 +91,13 @@ class KyotoTycoonError(Exception):
 
 
 class KyotoTycoon(object):
-    """The client"""
+    """New connections are created using the constructor. A connection is
+    automatically closed when the object is destroyed. There is the factory
+    method embedded which creates a server and client connected to it.
+
+    Keys and values of database entries are python bytes. You can pickle
+    objects to bytes strings. The encoding is handled by the user when
+    converting to bytes. Usually bytes(bla, encoding="UTF-8") is safe."""
 
     _client = None
 
@@ -85,11 +105,20 @@ class KyotoTycoon(object):
     def embedded(
             args=None,
             timeout=None,
-            range_form=RANGE_FROM,
+            range_from=RANGE_FROM,
             range_to=RANGE_TO
     ):
         """Start an embedded Kyoto Tycoon server and return a client conencted
         to it.
+
+        :param args: Additional arguments for the Kyoto Tycoon server.
+
+        :param timeout: Optional timeout for the socket. None means no timeout
+        (please also look at the Python socket manual).
+
+        :param range_from: Port range to select a random port from (from).
+
+        :param range_to: Port range to select a random port from (to).
 
         :rtype: KyotoTycoon
         """
@@ -101,7 +130,7 @@ class KyotoTycoon(object):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         while tries < 20:
             tries += 1
-            port = random.randint(range_form, range_to)
+            port = random.randint(range_from, range_to)
             try:
                 sock.bind(("127.0.0.1", port))
                 sock.listen(1)
@@ -127,6 +156,12 @@ class KyotoTycoon(object):
                     stderr=sys.__stderr__.fileno(),
                     stdout=sys.__stdout__.fileno(),
                 )
+
+                def cleanup():
+                    """Helper"""
+                    proc.terminate()
+
+                atexit.register(cleanup)
                 proc.wait()
                 _l().critical("ktserver died!")
 
@@ -147,49 +182,113 @@ class KyotoTycoon(object):
             except ConnectionRefusedError:  # noqa
                 time.sleep(0.2)
 
+    def __init__(
+            self,
+            host=DEFAULT_HOST,
+            port=DEFAULT_PORT,
+            lazy=True,
+            timeout=None
+    ):
+        """
+        :param host: The hostname or IP to connect to, defaults to
+        'localhost'.
 
-    def __init__(self, host=DEFAULT_HOST, port=DEFAULT_PORT, lazy=True,
-                 timeout=None):
+        :param port: The port number, defaults to 1978 which is the default
+        port of Kyoto Tycoon.
+
+        :param lazy: If set to True, connection is not immediately established
+        on object creation, instead it is openend automatically when required
+        for the first time. This is the recommended setting, because opening a
+            connection is only necessary if you actually use it.
+
+        :param timeout: Optional timeout for the socket. None means no timeout
+        (please also look at the Python socket manual).
+        """
         self.host = host
         self.port = port
         self.timeout = timeout
         self.socket = None
         if not lazy:
             self._connect()
-    
-    
+
     def set(self, key, val, db=0, expire=DEFAULT_EXPIRE, flags=0):
-        """The set"""
-        return self.set_bulk(((key,val,db,expire),), flags)
-    
-    
+        """Wrapper function around set_bulk for easily storing a single item
+        in the database.
+
+        :param key: The key of the entry,
+        :type key: bytes
+        :param val: The value of the entry
+        :type val: bytes
+        :param db: Database index to store the record in. Default to 0.
+        :type db: int
+
+        :param expire: Expiration time for all entries.
+        kyototycoon.DEFAULT_EXPIRE is 0x7FFFFFFFFFFFFFFF which means that the
+        records should never expire in the (near) future.
+
+        :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
+        wait for an answer of the server.
+
+        :return: The number of actually stored records, or None if flags was
+        set to kyototycoon.FLAG_NOREPLY.
+        """
+        return self.set_bulk(((key, val, db, expire),), flags)
+
     def set_bulk_kv(self, kv, db=0, expire=DEFAULT_EXPIRE, flags=0):
-        recs = ((key,val,db,expire) for key,val in kv.items())
+        """Wrapper function around set_bulk for simplifying the process of
+        storing multiple records with equal expiration times in the same
+        database.
+
+        :param kv: dict of key/value pairs.
+
+        :param db: database index to store the values in. defaults to 0.
+
+        :param expire: Expiration time for all entries.
+        kyototycoon.DEFAULT_EXPIRE is 0x7FFFFFFFFFFFFFFF which means that the
+        records should never expire in the (near) future.
+
+        :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
+        wait for an answer of the server.
+
+        :return: The number of actually stored records, or None if flags was
+        set to kyototycoon.FLAG_NOREPLY.
+        """
+        recs = ((key, val, db, expire) for key, val in kv.items())
         return self.set_bulk(recs, flags)
-    
-    
+
     def set_bulk(self, recs, flags=0):
+        """Stores multiple records at once.
+
+        :param recs: iterable (e.g. list) of records. Each record is a
+        list or tuple of 4 entries: key, val, db, expire
+
+        :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
+        wait for an answer of the server.
+
+        :return: The number of actually stored records, or None if flags was
+        set to kyototycoon.FLAG_NOREPLY.
+        """
         if self.socket is None:
             self._connect()
-            
+
         request = [struct.pack('!BI', MB_SET_BULK, flags), None]
-        
+
         cnt = 0
-        for key,val,db,xt in recs:
+        for key, val, db, xt in recs:
             assert isinstance(key, bytes), "Please pass bytes as key"
             assert isinstance(val, bytes), "Please pass bytes as value"
             request.append(struct.pack('!HIIq', db, len(key), len(val), xt))
             request.append(key)
             request.append(val)
             cnt += 1
-        
+
         request[1] = struct.pack('!I', cnt)
-        
+
         self._write(b''.join(request))
-        
+
         if flags & FLAG_NOREPLY:
             return None
-            
+
         magic, = struct.unpack('!B', self._read(1))
         if magic == MB_SET_BULK:
             recs_cnt, = struct.unpack('!I', self._read(4))
@@ -198,83 +297,149 @@ class KyotoTycoon(object):
             raise KyotoTycoonError('Internal server error 0x%02x' % MB_ERROR)
         else:
             raise KyotoTycoonError('Unknown server error')
-    
-    
+
     def get(self, key, db=0, flags=0):
+        """Wrapper function around get_bulk for easily retrieving a single
+        item from the database.
+
+
+        :param key: The key of the entry
+
+        :param db: The database index. Defaults to 0.
+
+        :param flags: reserved and not used now. (defined by protocol)
+
+        :return: The value of the record, or None if the record could not be
+        found in the database.
+        """
         recs = self.get_bulk(((key, db),), flags)
         if not recs:
             return None
         return recs[0][1]
-    
-    
+
     def get_bulk_keys(self, keys, db=0, flags=0):
-        recs = ((key,db) for key in keys)
+        """Wrapper function around get_bulk for simplifying the process of
+        retrieving multiple records from the same database.
+
+        :param keys: iterable (e.g. list) of keys.
+
+        :param db: database index to store the values in. defaults to 0.
+
+        :param flags: reserved and not used now. (defined by protocol)
+
+        :return: dict of key/value pairs.
+        """
+        recs = ((key, db) for key in keys)
         recs = self.get_bulk(recs, flags)
-        return dict(((key,val) for key,val,db,xt in recs))
-    
-    
+        return dict(((key, val) for key, val, db, xt in recs))
+
     def get_bulk(self, recs, flags=0):
+        """Retrieves multiple records at once.
+
+        :param recs: iterable (e.g. list) of record descriptions. Each
+        record is a list or tuple of 2 entries: key,db
+
+        :param flags: reserved and not used now. (defined by protocol)
+
+        :return: A list of records. Each record is a tuple of 4 entries: (key,
+        val, db, expire)
+        """
         if self.socket is None:
             self._connect()
-            
+
         request = [struct.pack('!BI', MB_GET_BULK, flags), None]
-        
+
         cnt = 0
-        for key,db in recs:
+        for key, db in recs:
             assert isinstance(key, bytes), "Please pass bytes as key"
             request.append(struct.pack('!HI', db, len(key)))
             request.append(key)
             cnt += 1
-        
+
         request[1] = struct.pack('!I', cnt)
-        
+
         self._write(b''.join(request))
-            
+
         magic, = struct.unpack('!B', self._read(1))
         if magic == MB_GET_BULK:
             recs_cnt, = struct.unpack('!I', self._read(4))
             recs = []
-            for i in range(recs_cnt):
-                db,key_len,val_len,xt = struct.unpack('!HIIq', self._read(18))
+            for _ in range(recs_cnt):
+                db, key_len, val_len, xt = struct.unpack(
+                    '!HIIq', self._read(18)
+                )
                 key = self._read(key_len)
                 val = self._read(val_len)
-                recs.append((key,val,db,xt))
+                recs.append((key, val, db, xt))
             return recs
         elif magic == MB_ERROR:
             raise KyotoTycoonError('Internal server error 0x%02x' % MB_ERROR)
         else:
             raise KyotoTycoonError('Unknown server error')
-    
-    
-    
+
     def remove(self, key, db, flags=0):
-        return self.remove_bulk(((key,db),), flags)
-    
-    
+        """Wrapper function around remove_bulk for easily removing a single
+        item from the database.
+
+        :param key: The key of the entry.
+
+        :param db: database index to store the values in. defaults to 0.
+
+        :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
+        wait for an answer of the server.
+
+        :return: The number of removed records, or None if flags was set to
+        kyototycoon.FLAG_NOREPLY
+        """
+        return self.remove_bulk(((key, db),), flags)
+
     def remove_bulk_keys(self, keys, db, flags=0):
-        recs = ((key,db) for key in keys)
+        """Wrapper function around remove_bulk for simplifying the process of
+        removing multiple records from the same database.
+
+        :param keys: iterable (e.g. list) of keys.
+
+        :param db: database index to store the values in. defaults to 0.
+
+        :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
+        wait for an answer of the server.
+
+        :return: The number of removed records, or None if flags was set to
+        kyototycoon.FLAG_NOREPLY
+        """
+        recs = ((key, db) for key in keys)
         return self.remove_bulk(recs, flags)
-    
-    
+
     def remove_bulk(self, recs, flags=0):
+        """Remove multiple records at once.
+
+        :param recs: iterable (e.g. list) of record descriptions. Each
+        record is a list or tuple of 2 entries: key,db
+
+        :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
+        wait for an answer of the server.
+
+        :return: The number of removed records, or None if flags was set to
+        kyototycoon.FLAG_NOREPLY
+        """
         if self.socket is None:
             self._connect()
-            
+
         request = [struct.pack('!BI', MB_REMOVE_BULK, flags), None]
-        
+
         cnt = 0
-        for key,db in recs:
+        for key, db in recs:
             request.append(struct.pack('!HI', db, len(key)))
             request.append(key)
             cnt += 1
-        
+
         request[1] = struct.pack('!I', cnt)
-        
+
         self._write(''.join(request))
-        
+
         if flags & FLAG_NOREPLY:
             return None
-            
+
         magic, = struct.unpack('!B', self._read(1))
         if magic == MB_REMOVE_BULK:
             recs_cnt, = struct.unpack('!I', self._read(4))
@@ -283,61 +448,78 @@ class KyotoTycoon(object):
             raise KyotoTycoonError('Internal server error 0x%02x' % MB_ERROR)
         else:
             raise KyotoTycoonError('Unknown server error')
-    
-    
+
     def play_script(self, name, recs, flags=0):
+        """Calls a procedure of the LUA scripting language extension.
+
+        :param name: The name of the LUA function.
+
+        :param recs: iterable (e.g. list) of records. Each record is a list or
+        tuple of 2 entries: key, val
+
+        :param flags: If set to kyototycoon.FLAG_NOREPLY, function will not
+        wait for an answer of the server.
+
+        :return: A list of records. Each record is a tuple of 2 entries: (key,
+        val). Or None if flags was set to kyototycoon.FLAG_NOREPLY.
+        """
         if self.socket is None:
             self._connect()
-            
-        request = [struct.pack('!BII', MB_PLAY_SCRIPT, flags, len(name)), None,
-                    name]
-        
+
+        request = [
+            struct.pack(
+                '!BII', MB_PLAY_SCRIPT, flags, len(name)
+            ), None, name
+        ]
+
         cnt = 0
-        for key,val in recs:
+        for key, val in recs:
             request.append(struct.pack('!II', len(key), len(val)))
             request.append(key)
             request.append(val)
             cnt += 1
-        
+
         request[1] = struct.pack('!I', cnt)
-        
+
         self._write(''.join(request))
-        
+
         if flags & FLAG_NOREPLY:
             return None
-            
+
         magic, = struct.unpack('!B', self._read(1))
         if magic == MB_PLAY_SCRIPT:
             recs_cnt, = struct.unpack('!I', self._read(4))
             recs = []
-            for i in range(recs_cnt):
-                key_len,val_len = struct.unpack('!II', self._read(8))
+            for _ in range(recs_cnt):
+                key_len, val_len = struct.unpack('!II', self._read(8))
                 key = self._read(key_len)
                 val = self._read(val_len)
-                recs.append((key,val))
+                recs.append((key, val))
             return recs
         elif magic == MB_ERROR:
             raise KyotoTycoonError('Internal server error 0x%02x' % MB_ERROR)
         else:
             raise KyotoTycoonError('Unknown server error')
-    
-    
+
     def close(self):
+        """Close the socket"""
         if self.socket is not None:
             self.socket.close()
             self.socket = None
-    
-    
+
     def _connect(self):
-        self.socket = socket.create_connection((self.host, self.port),
-                                                self.timeout)
-    
-    
+        """Conenct to server"""
+        self.socket = socket.create_connection(
+            (self.host, self.port),
+            self.timeout
+        )
+
     def _write(self, data):
+        """Write data"""
         self.socket.sendall(data)
-        
-    
+
     def _read(self, bytecnt):
+        """Read data"""
         buf = []
         read = 0
         while read < bytecnt:
@@ -345,7 +527,5 @@ class KyotoTycoon(object):
             if recv:
                 buf.append(recv)
                 read += len(recv)
-        
+
         return b''.join(buf)
-
-
