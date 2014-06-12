@@ -66,6 +66,7 @@ import subprocess
 import sys
 import time
 import atexit
+import asyncio
 
 MB_SET_BULK    = 0xb8
 MB_GET_BULK    = 0xba
@@ -210,13 +211,15 @@ class KyotoTycoon(object):
         :param timeout: Optional timeout for the socket. None means no timeout
                         (please also look at the Python socket manual).
         """
-        self.host = host
-        self.port = port
+        self.host    = host
+        self.port    = port
         self.timeout = timeout
-        self.socket = None
+        self.socket  = None
+        self.loop    = asyncio.get_event_loop()
         if not lazy:
             self._connect()
 
+    @asyncio.coroutine
     def set(self, key, val, db=0, expire=DEFAULT_EXPIRE, flags=0):
         """Wrapper function around set_bulk for easily storing a single item
         in the database.
@@ -244,8 +247,9 @@ class KyotoTycoon(object):
         :return: The number of actually stored records, or None if flags was
                  set to kyototycoon.FLAG_NOREPLY.
         """
-        return self.set_bulk(((key, val, db, expire),), flags)
+        return (yield from self.set_bulk(((key, val, db, expire),), flags))
 
+    @asyncio.coroutine
     def set_bulk_kv(self, kv, db=0, expire=DEFAULT_EXPIRE, flags=0):
         """Wrapper function around set_bulk for simplifying the process of
         storing multiple records with equal expiration times in the same
@@ -267,8 +271,9 @@ class KyotoTycoon(object):
                  set to kyototycoon.FLAG_NOREPLY.
         """
         recs = ((key, val, db, expire) for key, val in kv.items())
-        return self.set_bulk(recs, flags)
+        return (yield from self.set_bulk(recs, flags))
 
+    @asyncio.coroutine
     def set_bulk(self, recs, flags=0):
         """Stores multiple records at once.
 
@@ -297,20 +302,21 @@ class KyotoTycoon(object):
 
         request[1] = struct.pack('!I', cnt)
 
-        self._write(b''.join(request))
+        yield from self._write(b''.join(request))
 
         if flags & FLAG_NOREPLY:
             return None
 
-        magic, = struct.unpack('!B', self._read(1))
+        magic, = struct.unpack('!B', (yield from self._read(1)))
         if magic == MB_SET_BULK:
-            recs_cnt, = struct.unpack('!I', self._read(4))
+            recs_cnt, = struct.unpack('!I', (yield from self._read(4)))
             return recs_cnt
         elif magic == MB_ERROR:
             raise KyotoTycoonError('Internal server error 0x%02x' % MB_ERROR)
         else:
             raise KyotoTycoonError('Unknown server error')
 
+    @asyncio.coroutine
     def get(self, key, db=0, flags=0):
         """Wrapper function around get_bulk for easily retrieving a single
         item from the database.
@@ -327,11 +333,12 @@ class KyotoTycoon(object):
                  found in the database.
 
         """
-        recs = self.get_bulk(((key, db),), flags)
+        recs = yield from self.get_bulk(((key, db),), flags)
         if not recs:
             return None
         return recs[0][1]
 
+    @asyncio.coroutine
     def get_bulk_keys(self, keys, db=0, flags=0):
         """Wrapper function around get_bulk for simplifying the process of
         retrieving multiple records from the same database.
@@ -345,9 +352,10 @@ class KyotoTycoon(object):
         :return: dict of key/value pairs.
         """
         recs = ((key, db) for key in keys)
-        recs = self.get_bulk(recs, flags)
+        recs = yield from self.get_bulk(recs, flags)
         return dict(((key, val) for key, val, db, xt in recs))
 
+    @asyncio.coroutine
     def get_bulk(self, recs, flags=0):
         """Retrieves multiple records at once.
 
@@ -373,18 +381,18 @@ class KyotoTycoon(object):
 
         request[1] = struct.pack('!I', cnt)
 
-        self._write(b''.join(request))
+        yield from self._write(b''.join(request))
 
-        magic, = struct.unpack('!B', self._read(1))
+        magic, = struct.unpack('!B', (yield from self._read(1)))
         if magic == MB_GET_BULK:
-            recs_cnt, = struct.unpack('!I', self._read(4))
+            recs_cnt, = struct.unpack('!I', (yield from self._read(4)))
             recs = []
             for _ in range(recs_cnt):
                 db, key_len, val_len, xt = struct.unpack(
-                    '!HIIq', self._read(18)
+                    '!HIIq', (yield from self._read(18))
                 )
-                key = self._read(key_len)
-                val = self._read(val_len)
+                key = yield from self._read(key_len)
+                val = yield from self._read(val_len)
                 recs.append((key, val, db, xt))
             return recs
         elif magic == MB_ERROR:
@@ -392,6 +400,7 @@ class KyotoTycoon(object):
         else:
             raise KyotoTycoonError('Unknown server error')
 
+    @asyncio.coroutine
     def remove(self, key, db, flags=0):
         """Wrapper function around remove_bulk for easily removing a single
         item from the database.
@@ -407,8 +416,9 @@ class KyotoTycoon(object):
         :return: The number of removed records, or None if flags was set to
                  kyototycoon.FLAG_NOREPLY
         """
-        return self.remove_bulk(((key, db),), flags)
+        return (yield from self.remove_bulk(((key, db),), flags))
 
+    @asyncio.coroutine
     def remove_bulk_keys(self, keys, db, flags=0):
         """Wrapper function around remove_bulk for simplifying the process of
         removing multiple records from the same database.
@@ -424,8 +434,9 @@ class KyotoTycoon(object):
                  kyototycoon.FLAG_NOREPLY
         """
         recs = ((key, db) for key in keys)
-        return self.remove_bulk(recs, flags)
+        return (yield from self.remove_bulk(recs, flags))
 
+    @asyncio.coroutine
     def remove_bulk(self, recs, flags=0):
         """Remove multiple records at once.
 
@@ -451,20 +462,21 @@ class KyotoTycoon(object):
 
         request[1] = struct.pack('!I', cnt)
 
-        self._write(''.join(request))
+        yield from self._write(''.join(request))
 
         if flags & FLAG_NOREPLY:
             return None
 
-        magic, = struct.unpack('!B', self._read(1))
+        magic, = struct.unpack('!B', (yield from self._read(1)))
         if magic == MB_REMOVE_BULK:
-            recs_cnt, = struct.unpack('!I', self._read(4))
+            recs_cnt, = struct.unpack('!I', (yield from self._read(4)))
             return recs_cnt
         elif magic == MB_ERROR:
             raise KyotoTycoonError('Internal server error 0x%02x' % MB_ERROR)
         else:
             raise KyotoTycoonError('Unknown server error')
 
+    @asyncio.coroutine
     def play_script(self, name, recs, flags=0):
         """Calls a procedure of the LUA scripting language extension.
 
@@ -497,19 +509,21 @@ class KyotoTycoon(object):
 
         request[1] = struct.pack('!I', cnt)
 
-        self._write(''.join(request))
+        yield from self._write(''.join(request))
 
         if flags & FLAG_NOREPLY:
             return None
 
-        magic, = struct.unpack('!B', self._read(1))
+        magic, = struct.unpack('!B', (yield from self._read(1)))
         if magic == MB_PLAY_SCRIPT:
-            recs_cnt, = struct.unpack('!I', self._read(4))
+            recs_cnt, = struct.unpack('!I', (yield from self._read(4)))
             recs = []
             for _ in range(recs_cnt):
-                key_len, val_len = struct.unpack('!II', self._read(8))
-                key = self._read(key_len)
-                val = self._read(val_len)
+                key_len, val_len = struct.unpack(
+                    '!II', (yield from self._read(8))
+                )
+                key = yield from self._read(key_len)
+                val = yield from self._read(val_len)
                 recs.append((key, val))
             return recs
         elif magic == MB_ERROR:
@@ -530,16 +544,21 @@ class KyotoTycoon(object):
             self.timeout
         )
 
+    @asyncio.coroutine
     def _write(self, data):
         """Write data"""
-        self.socket.sendall(data)
+        yield from self.loop.sock_sendall(self.socket, data)
 
+    @asyncio.coroutine
     def _read(self, bytecnt):
         """Read data"""
         buf = []
         read = 0
         while read < bytecnt:
-            recv = self.socket.recv(bytecnt-read)
+            recv = yield from self.loop.sock_recv(
+                self.socket,
+                bytecnt - read
+            )
             if recv:
                 buf.append(recv)
                 read += len(recv)

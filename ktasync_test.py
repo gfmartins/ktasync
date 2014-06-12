@@ -34,23 +34,32 @@ except ImportError:  # pragma: no cover
 #     import mock
 
 import ktasync
+import asyncio
 
 
 class KtasyncTest(unittest.TestCase):
+    def setUp(self):
+        self.loop = asyncio.get_event_loop()
+        self.client = ktasync.KyotoTycoon.embedded()
+        self.client.close()
+
     def test_just_connect(self):
-        a = ktasync.KyotoTycoon.embedded()
-        self.assertIsInstance(a, ktasync.KyotoTycoon)
+        self.assertIsInstance(self.client, ktasync.KyotoTycoon)
 
     def test_set(self):
-        a = ktasync.KyotoTycoon.embedded()
-        self.assertIsInstance(a, ktasync.KyotoTycoon)
-        a.set(b"huhu", b"super", 0)
+        self.assertIsInstance(self.client, ktasync.KyotoTycoon)
+        self.loop.run_until_complete(
+            self.client.set(b"huhu", b"super", 0)
+        )
 
     def test_get(self):
-        a = ktasync.KyotoTycoon.embedded()
-        self.assertIsInstance(a, ktasync.KyotoTycoon)
-        a.set(b"huhu", b"best", 0)
-        val = a.get(b"huhu", 0)
+        self.assertIsInstance(self.client, ktasync.KyotoTycoon)
+        self.loop.run_until_complete(
+            self.client.set(b"huhu", b"best", 0)
+        )
+        val = self.loop.run_until_complete(
+            self.client.get(b"huhu", 0)
+        )
         self.assertEqual(val, b"best")
 
 # pylama:ignore=E0611,C0111

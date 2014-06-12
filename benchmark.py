@@ -24,7 +24,8 @@
 import time
 import uuid
 import ktasync
-import importlib.machinery
+import asyncio
+import importlib.machinery  # noqa
 
 loader = importlib.machinery.SourceFileLoader(
     "kyototycoon", "files/kyototycoon_orig.py"
@@ -34,41 +35,69 @@ kyototycoon = loader.load_module()
 NUM_REQUESTS = 5000
 NUM_BULK = 5
 
+
+loop = asyncio.get_event_loop()
+
+
 def _create_request():
+    """Get requests"""
     return [
         {
             bytes(
                 uuid.uuid1().hex, encoding="UTF-8"
             ) : b'1' for n in range(NUM_BULK)
-        } for n in range(NUM_REQUESTS)
+        } for n in range(NUM_REQUESTS)  # noqa
     ]
 
 
 def benchmark_get_bulk():
+    """Standard bulk test"""
     client = ktasync.KyotoTycoon.embedded()
     requests = _create_request()
 
-    [client.set_bulk_kv(req) for req in requests]
+    @asyncio.coroutine
+    def prepare():
+        """Helper"""
+        for req in requests:
+            yield from client.set_bulk_kv(req)
+
+    @asyncio.coroutine
+    def doit():
+        """Helper"""
+        for req in requests:
+            res = yield from client.get_bulk_keys(req.keys())
+
+    loop.run_until_complete(prepare())
 
     start = time.time()
-    [client.get_bulk_keys(req.keys()) for req in requests]
+    loop.run_until_complete(doit())
     print(
-        'get_bulk qps:', int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
+        'get_bulk qps:',
+        int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
 
 
 def benchmark_set_bulk():
+    """Standard bulk test"""
     client = ktasync.KyotoTycoon.embedded()
     requests = _create_request()
 
+    @asyncio.coroutine
+    def doit():
+        """Helper"""
+        for req in requests:
+            yield from client.set_bulk_kv(req)
+
     start = time.time()
-    [client.set_bulk_kv(req) for req in requests]
+    loop.run_until_complete(doit())
     print(
-        'set_bulk qps:', int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
+        'set_bulk qps:',
+        int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
 
 
 def benchmark_orig_get_bulk():
+    """Original bulk test"""
     emb = ktasync.KyotoTycoon.embedded()
     client = kyototycoon.KyotoTycoon(port=emb.port)
 
@@ -79,11 +108,13 @@ def benchmark_orig_get_bulk():
     start = time.time()
     [client.get_bulk_keys(req.keys(), db=0) for req in requests]
     print(
-        'orig get_bulk qps:', int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
+        'orig get_bulk qps:',
+        int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
 
 
 def benchmark_orig_set_bulk():
+    """Original bulk test"""
     emb = ktasync.KyotoTycoon.embedded()
     client = kyototycoon.KyotoTycoon(port=emb.port)
 
@@ -92,7 +123,8 @@ def benchmark_orig_set_bulk():
     start = time.time()
     [client.set_bulk_kv(req, db=0) for req in requests]
     print(
-        'orig set_bulk qps:', int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
+        'orig set_bulk qps:',
+        int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
 
 
@@ -100,3 +132,4 @@ benchmark_get_bulk()
 benchmark_set_bulk()
 benchmark_orig_get_bulk()
 benchmark_orig_set_bulk()
+# pylama:ignore=W0106
