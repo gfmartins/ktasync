@@ -395,27 +395,34 @@ class KyotoTycoon(object):
             request[1] = struct.pack('!I', cnt)
 
             sw.write(b''.join(request))
-
-            magic, = struct.unpack('!B', (yield from sr.read(1)))
-            if magic == MB_GET_BULK:
-                recs_cnt, = struct.unpack('!I', (yield from sr.read(4)))
-                recs = []
-                for _ in range(recs_cnt):
-                    db, key_len, val_len, xt = struct.unpack(
-                        '!HIIq', (yield from sr.read(18))
-                    )
-                    key = yield from sr.read(key_len)
-                    val = yield from sr.read(val_len)
-                    recs.append((key, val, db, xt))
-                return recs
-            elif magic == MB_ERROR:
-                raise KyotoTycoonError(
-                    'Internal server error 0x%02x' % MB_ERROR
-                )
-            else:
-                raise KyotoTycoonError('Unknown server error')
+            return (yield from self._read_keys(sr, MB_GET_BULK))
         finally:
             self._push_streams(sr, sw)
+
+    @asyncio.coroutine
+    def _read_keys(self, sr, magic_expect):
+        """Internal function for reading key from get_bulk or play_script"""
+        data = yield from sr.read(5)
+        magic, = struct.unpack('!B', data[:1])
+        if magic == magic_expect:
+            recs_cnt, = struct.unpack('!I', data[1:])
+            recs = []
+            data = yield from sr.read(18)
+            pre_data = 0
+            for _ in range(recs_cnt):
+                db, key_len, val_len, xt = struct.unpack(
+                    '!HIIq', data[pre_data:]
+                )
+                pre_data = key_len + val_len
+                data = yield from sr.read(pre_data + 18)
+                recs.append((data[:key_len], data[key_len:], db, xt))
+            return recs
+        elif magic == MB_ERROR:
+            raise KyotoTycoonError(
+                'Internal server error 0x%02x' % MB_ERROR
+            )
+        else:
+            raise KyotoTycoonError('Unknown server error')
 
     @asyncio.coroutine
     def remove(self, key, db, flags=0):
@@ -536,23 +543,7 @@ class KyotoTycoon(object):
                 return None
 
             magic, = struct.unpack('!B', (yield from sr.read(1)))
-            if magic == MB_PLAY_SCRIPT:
-                recs_cnt, = struct.unpack('!I', (yield from sr.read(4)))
-                recs = []
-                for _ in range(recs_cnt):
-                    key_len, val_len = struct.unpack(
-                        '!II', (yield from sr.read(8))
-                    )
-                    key = yield from sr.read(key_len)
-                    val = yield from sr.read(val_len)
-                    recs.append((key, val))
-                return recs
-            elif magic == MB_ERROR:
-                raise KyotoTycoonError(
-                    'Internal server error 0x%02x' % MB_ERROR
-                )
-            else:
-                raise KyotoTycoonError('Unknown server error')
+            return (yield from self._read_keys(sr, MB_PLAY_SCRIPT))
         finally:
             self._push_streams(sr, sw)
 

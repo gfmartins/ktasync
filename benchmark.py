@@ -39,8 +39,8 @@ NUM_BATCH = 20
 
 loop = asyncio.get_event_loop()
 
-#client = ktasync.KyotoTycoon.embedded()
-client = ktasync.KyotoTycoon(host="harry")
+client = ktasync.KyotoTycoon.embedded()
+#client = ktasync.KyotoTycoon(host="harry")
 orig   = kyototycoon.KyotoTycoon(host=client.host,port=client.port)
 
 def _create_request():
