@@ -34,6 +34,7 @@ kyototycoon = loader.load_module()
 
 NUM_REQUESTS = 5000
 NUM_BULK = 5
+NUM_BATCH = 50
 
 
 loop = asyncio.get_event_loop()
@@ -75,6 +76,42 @@ def benchmark_get_bulk():
         'get_bulk qps:',
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
+
+
+def benchmark_batch_get_bulk():
+    """Batch bulk test"""
+    client = ktasync.KyotoTycoon.embedded()
+    requests = _create_request()
+
+    @asyncio.coroutine
+    def prepare():
+        """Helper"""
+        for req in requests:
+            yield from client.set_bulk_kv(req)
+
+    @asyncio.coroutine
+    def doit(from_, to_):
+        """Helper"""
+        for req in requests[from_:to_]:
+            res = yield from client.get_bulk_keys(req.keys())
+
+    loop.run_until_complete(prepare())
+
+    start = time.time()
+    batchs = []
+    step = NUM_REQUESTS / NUM_BATCH
+    cur = int(step)
+    last = 0
+    while cur <= NUM_REQUESTS:
+        batchs.append(doit(last, cur))
+        last = int(cur)
+        cur += int(step)
+    loop.run_until_complete(asyncio.wait(batchs))
+    print(
+        'batch get_bulk qps:',
+        int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
+    )
+    print("Connections used: %d" % len(client.free_streams))
 
 
 def benchmark_set_bulk():
@@ -130,6 +167,7 @@ def benchmark_orig_set_bulk():
 
 benchmark_get_bulk()
 benchmark_set_bulk()
+benchmark_batch_get_bulk()
 benchmark_orig_get_bulk()
 benchmark_orig_set_bulk()
 # pylama:ignore=W0106

@@ -68,15 +68,16 @@ import time
 import atexit
 import asyncio
 
-MB_SET_BULK    = 0xb8
-MB_GET_BULK    = 0xba
-MB_REMOVE_BULK = 0xb9
-MB_ERROR       = 0xbf
-MB_PLAY_SCRIPT = 0xb4
+MB_SET_BULK     = 0xb8
+MB_GET_BULK     = 0xba
+MB_REMOVE_BULK  = 0xb9
+MB_ERROR        = 0xbf
+MB_PLAY_SCRIPT  = 0xb4
 
-DEFAULT_HOST   = 'localhost'
-DEFAULT_PORT   = 1978
-DEFAULT_EXPIRE = 0x7FFFFFFFFFFFFFFF
+DEFAULT_HOST    = 'localhost'
+DEFAULT_PORT    = 1978
+DEFAULT_EXPIRE  = 0x7FFFFFFFFFFFFFFF
+MAX_CONNECTIONS = 10
 
 FLAG_NOREPLY = 0x01
 
@@ -110,6 +111,7 @@ class KyotoTycoon(object):
     def embedded(
             args=None,
             timeout=None,
+            max_connections=MAX_CONNECTIONS,
             range_from=RANGE_FROM,
             range_to=RANGE_TO
     ):
@@ -120,6 +122,8 @@ class KyotoTycoon(object):
 
         :param timeout: Optional timeout for the socket. None means no timeout
                         (please also look at the Python socket manual).
+
+        :param max_connections: Maximum connections for io batching.
 
         :param range_from: Port range to select a random port from (from).
 
@@ -182,7 +186,8 @@ class KyotoTycoon(object):
                     host="127.0.0.1",
                     port=port,
                     lazy=False,
-                    timeout=timeout
+                    timeout=timeout,
+                    max_connections=max_connections
                 )
                 return KyotoTycoon._client
             except ConnectionRefusedError:  # noqa
@@ -193,7 +198,8 @@ class KyotoTycoon(object):
             host=DEFAULT_HOST,
             port=DEFAULT_PORT,
             lazy=True,
-            timeout=None
+            timeout=None,
+            max_connections=MAX_CONNECTIONS,
     ):
         """
         :param host: The hostname or IP to connect to, defaults to
@@ -211,11 +217,14 @@ class KyotoTycoon(object):
         :param timeout: Optional timeout for the socket. None means no timeout
                         (please also look at the Python socket manual).
         """
-        self.host    = host
-        self.port    = port
-        self.timeout = timeout
-        self.socket  = None
-        self.loop    = asyncio.get_event_loop()
+        self.host            = host
+        self.port            = port
+        self.timeout         = timeout
+        self.socket          = None
+        self.loop            = asyncio.get_event_loop()
+        self.max_connections = max_connections
+        self.free_streams    = []
+        self.semaphore       = asyncio.Semaphore(max_connections)
         if not lazy:
             self._connect()
 
@@ -286,35 +295,40 @@ class KyotoTycoon(object):
         :return: The number of actually stored records, or None if flags was
                  set to kyototycoon.FLAG_NOREPLY.
         """
-        if self.socket is None:
-            self._connect()
+        sr, sw = yield from self._pop_streams()
+        try:
+            request = [struct.pack('!BI', MB_SET_BULK, flags), None]
 
-        request = [struct.pack('!BI', MB_SET_BULK, flags), None]
+            cnt = 0
+            for key, val, db, xt in recs:
+                assert isinstance(key, bytes), "Please pass bytes as key"
+                assert isinstance(val, bytes), "Please pass bytes as value"
+                request.append(
+                    struct.pack('!HIIq', db, len(key), len(val), xt)
+                )
+                request.append(key)
+                request.append(val)
+                cnt += 1
 
-        cnt = 0
-        for key, val, db, xt in recs:
-            assert isinstance(key, bytes), "Please pass bytes as key"
-            assert isinstance(val, bytes), "Please pass bytes as value"
-            request.append(struct.pack('!HIIq', db, len(key), len(val), xt))
-            request.append(key)
-            request.append(val)
-            cnt += 1
+            request[1] = struct.pack('!I', cnt)
 
-        request[1] = struct.pack('!I', cnt)
+            sw.write(b''.join(request))
 
-        yield from self._write(b''.join(request))
+            if flags & FLAG_NOREPLY:
+                return None
 
-        if flags & FLAG_NOREPLY:
-            return None
-
-        magic, = struct.unpack('!B', (yield from self._read(1)))
-        if magic == MB_SET_BULK:
-            recs_cnt, = struct.unpack('!I', (yield from self._read(4)))
-            return recs_cnt
-        elif magic == MB_ERROR:
-            raise KyotoTycoonError('Internal server error 0x%02x' % MB_ERROR)
-        else:
-            raise KyotoTycoonError('Unknown server error')
+            magic, = struct.unpack('!B', (yield from sr.read(1)))
+            if magic == MB_SET_BULK:
+                recs_cnt, = struct.unpack('!I', (yield from sr.read(4)))
+                return recs_cnt
+            elif magic == MB_ERROR:
+                raise KyotoTycoonError(
+                    'Internal server error 0x%02x' % MB_ERROR
+                )
+            else:
+                raise KyotoTycoonError('Unknown server error')
+        finally:
+            self._push_streams(sr, sw)
 
     @asyncio.coroutine
     def get(self, key, db=0, flags=0):
@@ -367,38 +381,41 @@ class KyotoTycoon(object):
         :return: A list of records. Each record is a tuple of 4 entries: (key,
                  val, db, expire)
         """
-        if self.socket is None:
-            self._connect()
+        sr, sw = yield from self._pop_streams()
+        try:
+            request = [struct.pack('!BI', MB_GET_BULK, flags), None]
 
-        request = [struct.pack('!BI', MB_GET_BULK, flags), None]
+            cnt = 0
+            for key, db in recs:
+                assert isinstance(key, bytes), "Please pass bytes as key"
+                request.append(struct.pack('!HI', db, len(key)))
+                request.append(key)
+                cnt += 1
 
-        cnt = 0
-        for key, db in recs:
-            assert isinstance(key, bytes), "Please pass bytes as key"
-            request.append(struct.pack('!HI', db, len(key)))
-            request.append(key)
-            cnt += 1
+            request[1] = struct.pack('!I', cnt)
 
-        request[1] = struct.pack('!I', cnt)
+            sw.write(b''.join(request))
 
-        yield from self._write(b''.join(request))
-
-        magic, = struct.unpack('!B', (yield from self._read(1)))
-        if magic == MB_GET_BULK:
-            recs_cnt, = struct.unpack('!I', (yield from self._read(4)))
-            recs = []
-            for _ in range(recs_cnt):
-                db, key_len, val_len, xt = struct.unpack(
-                    '!HIIq', (yield from self._read(18))
+            magic, = struct.unpack('!B', (yield from sr.read(1)))
+            if magic == MB_GET_BULK:
+                recs_cnt, = struct.unpack('!I', (yield from sr.read(4)))
+                recs = []
+                for _ in range(recs_cnt):
+                    db, key_len, val_len, xt = struct.unpack(
+                        '!HIIq', (yield from sr.read(18))
+                    )
+                    key = yield from sr.read(key_len)
+                    val = yield from sr.read(val_len)
+                    recs.append((key, val, db, xt))
+                return recs
+            elif magic == MB_ERROR:
+                raise KyotoTycoonError(
+                    'Internal server error 0x%02x' % MB_ERROR
                 )
-                key = yield from self._read(key_len)
-                val = yield from self._read(val_len)
-                recs.append((key, val, db, xt))
-            return recs
-        elif magic == MB_ERROR:
-            raise KyotoTycoonError('Internal server error 0x%02x' % MB_ERROR)
-        else:
-            raise KyotoTycoonError('Unknown server error')
+            else:
+                raise KyotoTycoonError('Unknown server error')
+        finally:
+            self._push_streams(sr, sw)
 
     @asyncio.coroutine
     def remove(self, key, db, flags=0):
@@ -449,32 +466,36 @@ class KyotoTycoon(object):
         :return: The number of removed records, or None if flags was set to
                  kyototycoon.FLAG_NOREPLY
         """
-        if self.socket is None:
-            self._connect()
+        sr, sw = yield from self._pop_streams()
+        try:
 
-        request = [struct.pack('!BI', MB_REMOVE_BULK, flags), None]
+            request = [struct.pack('!BI', MB_REMOVE_BULK, flags), None]
 
-        cnt = 0
-        for key, db in recs:
-            request.append(struct.pack('!HI', db, len(key)))
-            request.append(key)
-            cnt += 1
+            cnt = 0
+            for key, db in recs:
+                request.append(struct.pack('!HI', db, len(key)))
+                request.append(key)
+                cnt += 1
 
-        request[1] = struct.pack('!I', cnt)
+            request[1] = struct.pack('!I', cnt)
 
-        yield from self._write(''.join(request))
+            sw.write(''.join(request))
 
-        if flags & FLAG_NOREPLY:
-            return None
+            if flags & FLAG_NOREPLY:
+                return None
 
-        magic, = struct.unpack('!B', (yield from self._read(1)))
-        if magic == MB_REMOVE_BULK:
-            recs_cnt, = struct.unpack('!I', (yield from self._read(4)))
-            return recs_cnt
-        elif magic == MB_ERROR:
-            raise KyotoTycoonError('Internal server error 0x%02x' % MB_ERROR)
-        else:
-            raise KyotoTycoonError('Unknown server error')
+            magic, = struct.unpack('!B', (yield from sr.read(1)))
+            if magic == MB_REMOVE_BULK:
+                recs_cnt, = struct.unpack('!I', (yield from sr.read(4)))
+                return recs_cnt
+            elif magic == MB_ERROR:
+                raise KyotoTycoonError(
+                    'Internal server error 0x%02x' % MB_ERROR
+                )
+            else:
+                raise KyotoTycoonError('Unknown server error')
+        finally:
+            self._push_streams(sr, sw)
 
     @asyncio.coroutine
     def play_script(self, name, recs, flags=0):
@@ -491,45 +512,49 @@ class KyotoTycoon(object):
         :return: A list of records. Each record is a tuple of 2 entries: (key,
                  val). Or None if flags was set to kyototycoon.FLAG_NOREPLY.
         """
-        if self.socket is None:
-            self._connect()
+        sr, sw = yield from self._pop_streams()
+        try:
 
-        request = [
-            struct.pack(
-                '!BII', MB_PLAY_SCRIPT, flags, len(name)
-            ), None, name
-        ]
+            request = [
+                struct.pack(
+                    '!BII', MB_PLAY_SCRIPT, flags, len(name)
+                ), None, name
+            ]
 
-        cnt = 0
-        for key, val in recs:
-            request.append(struct.pack('!II', len(key), len(val)))
-            request.append(key)
-            request.append(val)
-            cnt += 1
+            cnt = 0
+            for key, val in recs:
+                request.append(struct.pack('!II', len(key), len(val)))
+                request.append(key)
+                request.append(val)
+                cnt += 1
 
-        request[1] = struct.pack('!I', cnt)
+            request[1] = struct.pack('!I', cnt)
 
-        yield from self._write(''.join(request))
+            yield from sw.write(''.join(request))
 
-        if flags & FLAG_NOREPLY:
-            return None
+            if flags & FLAG_NOREPLY:
+                return None
 
-        magic, = struct.unpack('!B', (yield from self._read(1)))
-        if magic == MB_PLAY_SCRIPT:
-            recs_cnt, = struct.unpack('!I', (yield from self._read(4)))
-            recs = []
-            for _ in range(recs_cnt):
-                key_len, val_len = struct.unpack(
-                    '!II', (yield from self._read(8))
+            magic, = struct.unpack('!B', (yield from sr.read(1)))
+            if magic == MB_PLAY_SCRIPT:
+                recs_cnt, = struct.unpack('!I', (yield from sr.read(4)))
+                recs = []
+                for _ in range(recs_cnt):
+                    key_len, val_len = struct.unpack(
+                        '!II', (yield from sr.read(8))
+                    )
+                    key = yield from sr.read(key_len)
+                    val = yield from sr.read(val_len)
+                    recs.append((key, val))
+                return recs
+            elif magic == MB_ERROR:
+                raise KyotoTycoonError(
+                    'Internal server error 0x%02x' % MB_ERROR
                 )
-                key = yield from self._read(key_len)
-                val = yield from self._read(val_len)
-                recs.append((key, val))
-            return recs
-        elif magic == MB_ERROR:
-            raise KyotoTycoonError('Internal server error 0x%02x' % MB_ERROR)
-        else:
-            raise KyotoTycoonError('Unknown server error')
+            else:
+                raise KyotoTycoonError('Unknown server error')
+        finally:
+            self._push_streams(sr, sw)
 
     def close(self):
         """Close the socket"""
@@ -545,22 +570,19 @@ class KyotoTycoon(object):
         )
 
     @asyncio.coroutine
-    def _write(self, data):
-        """Write data"""
-        yield from self.loop.sock_sendall(self.socket, data)
+    def _pop_streams(self):
+        """Get a new stream. It will block (async) when max_connections is
+        reached"""
+        yield from self.semaphore.acquire()
+        if self.free_streams:
+            return self.free_streams.pop()
+        else:
+            return (yield from asyncio.open_connection(
+                self.host,
+                self.port,
+            ))
 
-    @asyncio.coroutine
-    def _read(self, bytecnt):
-        """Read data"""
-        buf = []
-        read = 0
-        while read < bytecnt:
-            recv = yield from self.loop.sock_recv(
-                self.socket,
-                bytecnt - read
-            )
-            if recv:
-                buf.append(recv)
-                read += len(recv)
-
-        return b''.join(buf)
+    def _push_streams(self, sr, sw):
+        """Return used stream."""
+        self.semaphore.release()
+        self.free_streams.append((sr, sw))
