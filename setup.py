@@ -27,7 +27,8 @@ setup(
         "Intended Audience :: Developers",
         "Development Status :: 3 - Alpha",
         "Topic :: Software Development :: Libraries",
-        "License :: OSI Approved :: MIT",
+        "Topic :: Database :: Front-Ends",
+        "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3.4",
     ],
 )
