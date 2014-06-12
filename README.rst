@@ -1,7 +1,8 @@
 ktasync
 =======
 
-Kyoto Tycoon Asyncio (Python 3.4+)
+Kyoto Tycoon Asyncio (Python 3.4+). Binary protocol of Kyoto Tycoon with asyncio
+for io batching.
 
 Based on `Ulrich Mierendorffs`_ work.
 
