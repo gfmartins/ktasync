@@ -25,6 +25,16 @@
 
 """Binary protocol of Kyoto Tycoon with asyncio for io batching"""
 
+# TODO PEP8
+# TODO Move documentation from homepage to code
+# TODO compare original / asyincio wo batch / asyncio with batch
+# TODO sphinx doc setup (take snippets from freeze)
+# TODO travis setup
+# TODO github badge setup
+# TODO stackoverflow question for promotion
+# TODO adsy blogging
+
+
 import socket
 import struct
 
