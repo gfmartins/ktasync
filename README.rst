@@ -8,7 +8,7 @@ Based on `Ulrich Mierendorffs`_ work.
 
 .. _`Ulrich Mierendorffs`: http://www.ulrichmierendorff.com/software/kyoto_tycoon/python_library.html
 
-Read the docs: http://ktasync.readthedocs.org/en/dev/
+Read the docs: http://ktasync.rtfd.org/en/dev/
 
 
 benchmark
