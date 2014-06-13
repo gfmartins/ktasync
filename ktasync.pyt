@@ -72,7 +72,7 @@ try:
     import asyncio
 except ImportError:
     import trollius as asyncio
-    from trollius import From
+    from trollius import From, Return
 
 MB_SET_BULK     = 0xb8
 MB_GET_BULK     = 0xba
@@ -272,9 +272,10 @@ class KyotoTycoon(object):
                  set to kyototycoon.FLAG_NOREPLY.
         """
         # cp #return (yield from self.set_bulk(
-        # pypy #return (yield From(self.set_bulk(
+        # pypy #raise Return((yield From(self.set_bulk(
             ((key, val, db, expire),), flags
-        ))
+        # cp #))
+        # pypy #))))
 
     @asyncio.coroutine
     def set_bulk_kv(self, kv, db=0, expire=DEFAULT_EXPIRE, flags=0):
@@ -299,7 +300,7 @@ class KyotoTycoon(object):
         """
         recs = ((key, val, db, expire) for key, val in kv.items())
         # cp #return (yield from self.set_bulk(recs, flags))
-        # pypy #return (yield From(self.set_bulk(recs, flags)))
+        # pypy #raise Return((yield From(self.set_bulk(recs, flags))))
 
     @asyncio.coroutine
     def set_bulk(self, recs, flags=0):
@@ -336,7 +337,8 @@ class KyotoTycoon(object):
 
             if flags & FLAG_NOREPLY:
                 self._push_streams(sr, sw)
-                return None
+                # cp #return None
+                # pypy #raise Return(None)
 
             magic, = struct.unpack('!B', (
             # cp #    yield from sr.readexactly(1))
@@ -348,7 +350,8 @@ class KyotoTycoon(object):
                 # pypy #    yield From(sr.readexactly(4)))
                 )
                 self._push_streams(sr, sw)
-                return recs_cnt
+                # cp #return recs_cnt
+                # pypy #raise Return(recs_cnt)
             elif magic == MB_ERROR:
                 raise KyotoTycoonError(
                     'Internal server error 0x%02x' % MB_ERROR
@@ -378,8 +381,10 @@ class KyotoTycoon(object):
         # cp #recs = yield from self.get_bulk(((key, db),), flags)
         # pypy #recs = yield From(self.get_bulk(((key, db),), flags))
         if not recs:
-            return None
-        return recs[0][1]
+            # cp #return None
+            # pypy #raise Return(None)
+        # cp #return recs[0][1]
+        # pypy #raise Return(recs[0][1])
 
     @asyncio.coroutine
     def get_bulk_keys(self, keys, db=0, flags=0):
@@ -396,8 +401,9 @@ class KyotoTycoon(object):
         """
         recs = ((key, db) for key in keys)
         # cp #recs = yield from self.get_bulk(recs, flags)
+        # cp #return dict(((key, val) for key, val, db, xt in recs))
         # pypy #recs = yield From(self.get_bulk(recs, flags))
-        return dict(((key, val) for key, val, db, xt in recs))
+        # pypy #raise Return(dict(((key, val) for key, val, db, xt in recs)))
 
     @asyncio.coroutine
     def get_bulk(self, recs, flags=0):
@@ -429,7 +435,8 @@ class KyotoTycoon(object):
             # cp #res = yield from self._read_keys(sr, MB_GET_BULK)
             # pypy #res = yield From(self._read_keys(sr, MB_GET_BULK))
             self._push_streams(sr, sw)
-            return res
+            # cp #return res
+            # pypy #raise Return(res)
         finally:
             self._release_connection()
 
@@ -463,7 +470,8 @@ class KyotoTycoon(object):
                 # cp #data = yield from sr.readexactly(pre_data)
                 # pypy #data = yield From(sr.readexactly(pre_data))
                 recs.append((data[:key_len], data[key_len:], db, xt))
-            return recs
+            # cp #return recs
+            # pypy #raise Return(recs)
         elif magic == MB_ERROR:
             raise KyotoTycoonError(
                 'Internal server error 0x%02x' % MB_ERROR
@@ -488,7 +496,7 @@ class KyotoTycoon(object):
                  kyototycoon.FLAG_NOREPLY
         """
         # cp #return (yield from self.remove_bulk(((key, db),), flags))
-        # pypy #return (yield From(self.remove_bulk(((key, db),), flags)))
+        # pypy #raise Return((yield From(self.remove_bulk(((key, db),), flags))))
 
     @asyncio.coroutine
     def remove_bulk_keys(self, keys, db, flags=0):
@@ -507,7 +515,7 @@ class KyotoTycoon(object):
         """
         recs = ((key, db) for key in keys)
         # cp #return (yield from self.remove_bulk(recs, flags))
-        # pypy #return (yield From(self.remove_bulk(recs, flags)))
+        # pypy #raise Return((yield From(self.remove_bulk(recs, flags))))
 
     @asyncio.coroutine
     def remove_bulk(self, recs, flags=0):
@@ -540,7 +548,8 @@ class KyotoTycoon(object):
 
             if flags & FLAG_NOREPLY:
                 self._push_streams(sr, sw)
-                return None
+                # cp #return None
+                # pypy #raise Return(None)
 
             magic, = struct.unpack(
             # cp #    '!B', (yield from sr.readexactly(1))
@@ -552,7 +561,8 @@ class KyotoTycoon(object):
                 # pypy #    '!I', (yield From(sr.readexactly(4)))
                 )
                 self._push_streams(sr, sw)
-                return recs_cnt
+                # cp #return recs_cnt
+                # pypy #raise Return(recs_cnt)
             elif magic == MB_ERROR:
                 raise KyotoTycoonError(
                     'Internal server error 0x%02x' % MB_ERROR
@@ -601,7 +611,8 @@ class KyotoTycoon(object):
 
             if flags & FLAG_NOREPLY:
                 self._push_streams(sr, sw)
-                return None
+                # cp #return None
+                # pypy #raise Return(None)
 
             magic, = struct.unpack(
             # cp #    '!B', (yield from sr.readexactly(1))
@@ -610,7 +621,8 @@ class KyotoTycoon(object):
             # cp #res = yield from self._read_keys(sr, MB_PLAY_SCRIPT)
             # pypy #res = yield From(self._read_keys(sr, MB_PLAY_SCRIPT))
             self._push_streams(sr, sw)
-            return res
+            # cp #return res
+            # pypy #raise Return(res)
         finally:
             self._release_connection()
 
@@ -634,14 +646,15 @@ class KyotoTycoon(object):
         # cp #yield from self.semaphore.acquire()
         # pypy #yield From(self.semaphore.acquire())
         if self.free_streams:
-            return self.free_streams.pop()
+            # cp #return self.free_streams.pop()
+            # pypy #raise Return(self.free_streams.pop())
         else:
             # cp #return (yield from asyncio.open_connection(
-            # pypy #return (yield From(asyncio.open_connection(
+            # pypy #raise Return((yield From(asyncio.open_connection(
                 self.host,
                 self.port,
             # cp #))
-            # pypy #))
+            # pypy #))))
 
     def _release_connection(self):
         """Release the semaphore
