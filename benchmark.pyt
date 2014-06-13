@@ -33,11 +33,11 @@ import os
 import random
 import dbm
 
-import importlib.machinery  # noqa
-loader = importlib.machinery.SourceFileLoader(
-    "kyototycoon", "files/kyototycoon_orig.py"
-)
-kyototycoon = loader.load_module()
+# cp #import importlib.machinery  # noqa
+# cp #loader = importlib.machinery.SourceFileLoader(
+# cp #    "kyototycoon", "files/kyototycoon_orig.py"
+# cp #)
+# cp #kyototycoon = loader.load_module()
 # pypy #import imp
 # pypy #
 # pypy #kyototycoon = imp.load_source(
@@ -73,7 +73,7 @@ def prepare():
     """Helper"""
     requests = _create_request()
     for req in requests:
-        yield from client.set_bulk_kv(req)
+        # cp #yield from client.set_bulk_kv(req)
         # pypy #yield From(client.set_bulk_kv(req))
 
 def benchmark_get_bulk():
@@ -84,7 +84,7 @@ def benchmark_get_bulk():
         """Helper"""
         requests = _create_request()
         for req in requests:
-            res = yield from client.get_bulk_keys(req.keys())
+            # cp #res = yield from client.get_bulk_keys(req.keys())
             # pypy #res = yield From(client.get_bulk_keys(req.keys()))
 
     loop.run_until_complete(prepare())
@@ -107,7 +107,7 @@ def benchmark_batch_get_bulk():
         """Helper"""
         for _ in range(step):
             req = next(requests)
-            res = yield from client.get_bulk_keys(req.keys())
+            # cp #res = yield from client.get_bulk_keys(req.keys())
             # pypy #res = yield From(client.get_bulk_keys(req.keys()))
 
     loop.run_until_complete(prepare())
@@ -133,7 +133,7 @@ def benchmark_set_bulk():
     def doit():
         """Helper"""
         for req in requests:
-            yield from client.set_bulk_kv(req)
+            # cp #yield from client.set_bulk_kv(req)
             # pypy #yield From(client.set_bulk_kv(req))
 
     start = time.time()
@@ -179,7 +179,7 @@ def benchmark_dbm_set():
         for k, v in req.items():
             dbm_file[k] = v
 
-    dbm_file.sync()
+    # cp #dbm_file.sync()
     print(
         'dmb get qps:',
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
@@ -198,7 +198,7 @@ def benchmark_dbm_get():
     for req in requests:
         for k, v in req.items():
             req[k] = dbm_file[k]
-    dbm_file.sync()
+    # cp #dbm_file.sync()
     print(
         'dmb get qps:',
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))

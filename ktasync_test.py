@@ -34,7 +34,10 @@ except ImportError:  # pragma: no cover
 #     import mock
 
 import ktasync
-import asyncio
+try:
+    import asyncio
+except ImportError:
+    import trollius as asyncio
 
 
 class KtasyncTest(unittest.TestCase):

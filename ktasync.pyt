@@ -204,7 +204,8 @@ class KyotoTycoon(object):
                     max_connections=max_connections
                 )
                 return KyotoTycoon._client
-            except ConnectionRefusedError:  # noqa
+            # cp #except ConnectionRefusedError:
+            # pypy #except Exception:
                 time.sleep(0.2)
         raise KyotoTycoonError("Embedded server not started!")
 
