@@ -12,7 +12,7 @@ Based on `Ulrich Mierendorffs`_ work.
 benchmark
 =========
 
-Local:
+Local::
 
     orig get_bulk qps: 34811
     orig set_bulk qps: 26580
@@ -23,7 +23,7 @@ Local:
     dmb get qps: 31883
     dmb get qps: 8803
 
-Remote:
+Remote::
 
 
     orig get_bulk qps: 1658
