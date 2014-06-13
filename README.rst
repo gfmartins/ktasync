@@ -10,7 +10,7 @@ Based on `Ulrich Mierendorffs`_ work.
 
 Read the docs: http://ktasync.rtfd.org/en/dev/
 
-PyPy: Supported via trolluis
+PyPy/CPython 2.7: Supported via trolluis
 
 benchmark
 =========
