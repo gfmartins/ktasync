@@ -34,11 +34,12 @@ commands: set_bulk, get_bulk, remove_bulk (plus some wrapper functions to
 easily use these commands if you only need to access a single item) and
 play_script.
 
-The library is implemented in pure Python and only requires the modules socket
-and struct (Python standard library). Therefore, it is possible to use the
-library with other interpreters than the standard CPython. The code has been
-tested with python 3.4 since it is based on the asyncio module interoduced in
-3.4. If pypy will implement asyncio in can be ported to pypy.
+The library is implemented in pure Python and requires the module asyncio
+and other Python standard library modules. Therefore, it is possible to use
+the library with other interpreters than the standard CPython. The code has
+been tested with python 3.4 since it is based on the asyncio module
+introduced in 3.4. If pypy will implement asyncio in can be ported to
+pypy and possibly other implementation.
 
 """
 
