@@ -326,6 +326,7 @@ class KyotoTycoon(object):
             sw.write(b''.join(request))
 
             if flags & FLAG_NOREPLY:
+                self._push_streams(sr, sw)
                 return None
 
             magic, = struct.unpack('!B', (yield from sr.readexactly(1)))
@@ -422,7 +423,7 @@ class KyotoTycoon(object):
             recs_cnt, = struct.unpack('!I', data[1:])
             recs_cnt -= 1
             recs = []
-            # Reduce yields be ready key and next header at once
+            # Reduce yields be reading key and next header at once
             if recs_cnt >= 0:
                 data = yield from sr.readexactly(18)
                 pre_data = 0
@@ -512,6 +513,7 @@ class KyotoTycoon(object):
             sw.write(''.join(request))
 
             if flags & FLAG_NOREPLY:
+                self._push_streams(sr, sw)
                 return None
 
             magic, = struct.unpack('!B', (yield from sr.readexactly(1)))
@@ -564,6 +566,7 @@ class KyotoTycoon(object):
             yield from sw.write(''.join(request))
 
             if flags & FLAG_NOREPLY:
+                self._push_streams(sr, sw)
                 return None
 
             magic, = struct.unpack('!B', (yield from sr.readexactly(1)))

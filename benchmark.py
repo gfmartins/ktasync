@@ -40,6 +40,7 @@ NUM_BULK = 50
 NUM_BATCH = 20
 
 
+seed = random.randint(0, 2**64)
 loop = asyncio.get_event_loop()
 
 client   = ktasync.KyotoTycoon.embedded(["test.kch"])
@@ -49,12 +50,15 @@ dbm_file = dbm.open("test.dbm", "c")
 
 def _create_request():
     """Get requests"""
+    random.seed(seed)
     file_ = open("rand.bin", "rb")
     for _ in range(NUM_REQUESTS):
         dict_ = {}
         for _ in range(NUM_BULK):
-            dict_[file_.read(64)] = file_.read(1024)
+            c = random.randint(32, 2048)
+            dict_[file_.read(64)] = file_.read(c)
         yield dict_
+    file_.close()
 
 def benchmark_get_bulk():
     """Standard bulk test"""
