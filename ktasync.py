@@ -50,6 +50,7 @@ tested with python 3.4 since it is based on the asyncio module interoduced in
 #      -> with keep alive and logging of failures
 # TODO compare original / asyincio wo batch / asyncio with batch
 # TODO Write tests
+# TODO remove that lazy stuff, since we are always lazy (batching)
 # TODO sphinx doc setup (take snippets from freeze)
 # TODO travis setup
 # TODO github badge setup

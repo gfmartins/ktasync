@@ -8,6 +8,8 @@ Based on `Ulrich Mierendorffs`_ work.
 
 .. _`Ulrich Mierendorffs`: http://www.ulrichmierendorff.com/software/kyoto_tycoon/python_library.html
 
+Read the docs: http://kyoto-tycoon-asyncio-34.readthedocs.org/en/dev/
+
 
 benchmark
 =========
