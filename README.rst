@@ -22,8 +22,8 @@ Local::
     set_bulk qps: 24900
     batch get_bulk qps: 63306 [1]
     Connections used: 20
-    dmb get qps: 31883
-    dmb get qps: 8803
+    dbm get qps: 31883
+    dbm get qps: 8803
 
 Remote::
 
