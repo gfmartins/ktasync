@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to ktasync's documentation!
-===================================
+Kyoto Tycoon Asyncio (3.4+)
+===========================
 
 
 .. automodule:: ktasync
