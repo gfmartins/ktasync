@@ -38,8 +38,7 @@ The library is implemented in pure Python and requires the module asyncio
 and other Python standard library modules. Therefore, it is possible to use
 the library with other interpreters than the standard CPython. The code has
 been tested with python 3.4 since it is based on the asyncio module
-introduced in 3.4. If pypy will implement asyncio in can be ported to
-pypy and possibly other implementation.
+introduced in 3.4. It uses trollium for PyPy and Python 2.7 compatibility.
 
 """
 
