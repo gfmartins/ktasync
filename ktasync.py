@@ -199,7 +199,7 @@ class KyotoTycoon(object):
                 KyotoTycoon._client = KyotoTycoon(
                     host="127.0.0.1",
                     port=port,
-                    lazy=False,
+                    probe=True,
                     timeout=timeout,
                     max_connections=max_connections
                 )
@@ -213,7 +213,7 @@ class KyotoTycoon(object):
             self,
             host=DEFAULT_HOST,
             port=DEFAULT_PORT,
-            lazy=True,
+            probe=False,
             timeout=None,
             max_connections=MAX_CONNECTIONS,
     ):
@@ -224,11 +224,9 @@ class KyotoTycoon(object):
         :param port: The port number, defaults to 1978 which is the default
                      port of Kyoto Tycoon.
 
-        :param lazy: If set to True, connection is not immediately established
-                     on object creation, instead it is openend automatically
-                     when required for the first time. This is the recommended
-                     setting, because opening a connection is only necessary
-                     if you actually use it.
+        :param probe: If set to True, the server connection is checked. The
+                      connections later are taken from a pool. This option helps
+                      to prevent later failures.
 
         :param timeout: Optional timeout for the socket. None means no timeout
                         (please also look at the Python socket manual).
@@ -241,8 +239,8 @@ class KyotoTycoon(object):
         self.max_connections = max_connections
         self.free_streams    = []
         self.semaphore       = asyncio.Semaphore(max_connections)
-        if not lazy:
-            self._connect()
+        if probe:
+            self._probe()
 
     @asyncio.coroutine
     def set(self, key, val, db=0, expire=DEFAULT_EXPIRE, flags=0):
@@ -628,17 +626,22 @@ class KyotoTycoon(object):
             self._release_connection()
 
     def close(self):
-        """Close the socket"""
-        if self.socket is not None:
-            self.socket.close()
-            self.socket = None
+        """Close the sockets"""
+        while self.free_streams:
+            _, sw = self.free_streams.pop()
+            sw.close()
 
-    def _connect(self):
-        """Conenct to server"""
-        self.socket = socket.create_connection(
+    def _probe(self):
+        """Probe the server"""
+        sock = socket.create_connection(
             (self.host, self.port),
             self.timeout
         )
+        sock.close()
+
+    def __del__(self):
+        """Cleanup on the delete"""
+        self.close()
 
     @asyncio.coroutine
     def _pop_streams(self):

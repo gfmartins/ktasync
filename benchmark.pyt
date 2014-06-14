@@ -179,9 +179,8 @@ def benchmark_dbm_set():
         for k, v in req.items():
             dbm_file[k] = v
 
-    # cp #dbm_file.sync()
     print(
-        'dmb get qps:',
+        'dbm get qps:',
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
 
@@ -198,9 +197,8 @@ def benchmark_dbm_get():
     for req in requests:
         for k, v in req.items():
             req[k] = dbm_file[k]
-    # cp #dbm_file.sync()
     print(
-        'dmb get qps:',
+        'dbm get qps:',
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
 
