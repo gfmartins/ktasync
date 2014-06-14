@@ -1,4 +1,6 @@
 include *.txt
 include ktasync.pyt
+include README.rst
+include LICENSE
 recursive-include examples *.txt *.py
 prune examples/sample?/build
