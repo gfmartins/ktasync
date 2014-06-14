@@ -198,7 +198,7 @@ def benchmark_dbm_get():
         for k, v in req.items():
             req[k] = dbm_file[k]
     print(
-        'dbm get qps:',
+        'dbm set qps:',
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
 
