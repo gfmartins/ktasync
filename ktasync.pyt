@@ -225,8 +225,8 @@ class KyotoTycoon(object):
                      port of Kyoto Tycoon.
 
         :param probe: If set to True, the server connection is checked. The
-                      connections later are taken from a pool. This option helps
-                      to prevent later failures.
+                      connections are taken from a pool. This option helps
+                      to prevent late failures.
 
         :param timeout: Optional timeout for the socket. None means no timeout
                         (please also look at the Python socket manual).
