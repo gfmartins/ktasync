@@ -32,6 +32,7 @@ except ImportError:
 import os
 import random
 import dbm
+import kyotocabinet
 
 import importlib.machinery  # noqa
 loader = importlib.machinery.SourceFileLoader(
@@ -44,7 +45,7 @@ kyototycoon = loader.load_module()
 # pypy #    'kyototyocoon', 'files/kyototycoon_orig.py'
 # pypy #)
 
-NUM_REQUESTS = 1000
+NUM_REQUESTS = 20000
 NUM_BULK = 50
 NUM_BATCH = 20
 
@@ -55,6 +56,9 @@ client   = ktasync.KyotoTycoon.embedded(["test.kch"])
 #client   = ktasync.KyotoTycoon(host="harry")
 orig     = kyototycoon.KyotoTycoon(host=client.host, port=client.port)
 dbm_file = dbm.open("test.dbm", "c")
+kt       = kyotocabinet.DB("test2.kch")
+kt.open()
+
 
 def _create_request():
     """Get requests"""
@@ -170,6 +174,7 @@ def benchmark_orig_set_bulk():
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
 
+
 def benchmark_dbm_set():
     """Dbm test"""
 
@@ -180,9 +185,10 @@ def benchmark_dbm_set():
             dbm_file[k] = v
 
     print(
-        'dbm get qps:',
+        'dbm set qps:',
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
+
 
 def benchmark_dbm_get():
     """Dbm test"""
@@ -198,7 +204,39 @@ def benchmark_dbm_get():
         for k, v in req.items():
             req[k] = dbm_file[k]
     print(
-        'dbm set qps:',
+        'dbm get qps:',
+        int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
+    )
+
+
+def benchmark_kt_set():
+    """kt test"""
+
+    requests = _create_request()
+    start = time.time()
+    for req in requests:
+        kt.set_bulk(req)
+    kt.synchronize(True)
+    print(
+        'kt set qps:',
+        int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
+    )
+
+
+def benchmark_kt_get():
+    """Dbm test"""
+
+    requests = _create_request()
+    for req in requests:
+        kt.set_bulk(req)
+
+    requests = _create_request()
+    start = time.time()
+    for req in requests:
+        a = kt.get_bulk(list(req.keys()))
+    kt.synchronize(True)
+    print(
+        'kt set qps:',
         int(NUM_REQUESTS * NUM_BULK / (time.time() - start))
     )
 
@@ -210,6 +248,8 @@ benchmark_set_bulk()
 benchmark_batch_get_bulk()
 benchmark_dbm_get()
 benchmark_dbm_set()
+benchmark_kt_set()
+benchmark_kt_get()
 #os.unlink("test.kch")
 #os.unlink("test.dbm")
 # pylama:ignore=W0106

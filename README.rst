@@ -17,14 +17,17 @@ benchmark
 
 Local::
 
-    orig get_bulk qps: 34811
-    orig set_bulk qps: 26580
-    get_bulk qps: 40689
-    set_bulk qps: 24900
-    batch get_bulk qps: 63306 [1]
-    Connections used: 20
-    dbm get qps: 31883
-    dbm set qps: 8803
+    Starting
+    orig get_bulk qps: 57596
+    orig set_bulk qps: 34485
+    get_bulk qps: 56630
+    set_bulk qps: 33408
+    batch get_bulk qps: 71625
+    Connections used: 4
+    dbm get qps: 142707
+    dbm set qps: 26818
+    kt set qps: 197260
+    kt set qps: 198865
 
 Remote::
 
